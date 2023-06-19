@@ -18,7 +18,7 @@ This repo adds a vision based defect detection support.
 - [Resources](#resources)
 
 ## About Defect Detection Demo
-This is a demo using **[AM62A](https://www.ti.com/tool/SK-AM62A-LP)** to run a vision based artificial intelligent model for defect detection for manufacturing applications. The model tests the produced units as they move on a conveyer belt, to recognized the accepted and the defected units. The demo is equipped with an object tracker to provide accurate coordinates of the units for sorting and filtering process. A live video is displayed on the screen with green and red boxes overlaid on the accepted and defected units respectively. The screen also includes a graphical dashboard showing live statistics bout total products, defect percentage, production rate, and a histogram of the types of defect. This demo is built based on the the edgeai-gst-apps. It runs on Python only for this current version.
+This is a demo using **[AM62A](https://www.ti.com/tool/SK-AM62A-LP)** to run a vision based artificial intelligent model for defect detection for manufacturing applications. The model tests the produced units as they move on a conveyer belt, to recognized the accepted and the defected units. The demo is equipped with an object tracker to provide accurate coordinates of the units for sorting and filtering process. A live video is displayed on the screen with green and red boxes overlaid on the accepted and defected units respectively. The screen also includes a graphical dashboard showing live statistics about total products, defect percentage, production rate, and a histogram of the types of defect. This demo is built based on the edgeai-gst-apps. It runs on Python only for this current version.
 
 This demo runs a custom trained YOLOX-nano neural network[^1] on the **[AM62A](https://www.ti.com/tool/SK-AM62A-LP)** and performs object detection on imagery to find dfd
 
@@ -57,8 +57,8 @@ Follow the [AM62A Quick Start guide](https://dev.ti.com/tirex/explore/node?node=
     ```
 
     This script will download the following:
-    a. A pre-trained defect detection model based on yolox-nano-lite[^1] and install it under /opt/model_zoo in the filesystem.
-    b. The test video to run the demo without the need to a camera.
+    * A pre-trained defect detection model based on yolox-nano-lite[^1] and install it under /opt/model_zoo in the filesystem.
+    * The test video to run the demo without the need to a camera.
 
 
 3. Run commands as follows from the base directory of this repo on the EVM.
@@ -85,10 +85,10 @@ The demo is built by custom training YOLOX-nano model. Four classes are used to 
 
 ![](./doc/classes.jpg)
 
-100 pictures were taken for each class (total 400 pictures) in one orientation while changing the lighting condition of each picture. The camera is positioned at a hight that is approximate to the height expected in the actual demo setup. The pictures are captured with a resolution of 720x720. The following figure shows samples of the pictures captured for the good class.
+100 pictures were taken for each class (total 400 pictures) in one orientation while changing the lighting condition of each picture. The camera is positioned at a height that is approximate to the height expected in the actual demo setup. The pictures are captured with a resolution of 720x720. The following figure shows samples of the pictures captured for the good class.
 ![](./doc/samples_good_class.jpg)
 
-Then data augmentation is used expand the collected dataset. Two geometrical augmentation methods are applied flip right-left and rotation. First flipped copies are created for each picture which brings the total number of pictures to 400x2=800. Then five rotated copies of each picture is created which brings the total number of pictures up to 800+800x5=4800 pictures. The rotation angle is randomly selected for each picture. The following figure shows the augmentation process with an example. The pictures in the figure are cropped show the changes.
+Data augmentation is used expand the collected dataset. Two geometrical augmentation methods are applied flip right-left and rotation. First flipped copies are created for each picture which brings the total number of pictures to 400x2=800. Then five rotated copies of each picture are created which brings the total number of pictures up to 800+800x5=4800 pictures. The rotation angle is randomly selected for each picture. The following figure shows the augmentation process with an example. The pictures in the figure are cropped show the changes.
 
 ![](./doc/augmentation_process.jpg)
 
@@ -151,4 +151,4 @@ A new class is added to the post_process.py to control all post process work rel
 
 
 
-[^1]: This deep learning model for barcode localization is not production grade and is provided as is. TI provides no claims or guarantees about the accuracy of this model or its usage in commercial applications. This model is intended for evaluation only.
+[^1]: This deep learning model for defect detection is not production grade and is provided as is. TI provides no claims or guarantees about the accuracy of this model or its usage in commercial applications. This model is intended for evaluation only.
