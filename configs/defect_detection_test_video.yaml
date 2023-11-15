@@ -32,12 +32,12 @@ outputs:
         sink: kmssink
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output1:
         sink: /opt/edgeai-test-data/output/defect_detection_USB_0.mkv
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output2:
         sink: remote
         width: 1280

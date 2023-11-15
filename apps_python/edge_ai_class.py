@@ -250,17 +250,4 @@ class EdgeAIDemo:
 
         # Hack del for model_obj is not called since refcount is not 1 here.
         for _,model_obj in self.models.items():
-<<<<<<< HEAD
             del model_obj.run_time
-=======
-            del model_obj.run_time
-
-    def wait_for_exit(self):
-        """
-        Wait for the end of demo and do the clean up
-        to be called at the end of the main thread
-        """
-        for i in self.infer_pipes:
-            i.wait_for_exit()
-        self.gst_pipe.free()
->>>>>>> c305f67 (Defect detection Is ready to merge. (#1))

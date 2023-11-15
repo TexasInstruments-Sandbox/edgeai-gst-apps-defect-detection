@@ -123,9 +123,5 @@ class InferPipe:
             # Increment frame count
             self.sub_flow.report.report_frame()
 
-<<<<<<< HEAD
         self.stop_thread = True
-=======
-        self.stop_thread = False
->>>>>>> c305f67 (Defect detection Is ready to merge. (#1))
         self.gst_pipe.send_eos(self.gst_post_out)

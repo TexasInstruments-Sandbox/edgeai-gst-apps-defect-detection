@@ -96,13 +96,10 @@ class PostProcess:
             return PostProcessDetection(flow)
         elif flow.model.task_type == "segmentation":
             return PostProcessSegmentation(flow)
-<<<<<<< HEAD
         elif flow.model.task_type == "keypoint_detection":
             return PostProcessKeypointDetection(flow)
-=======
         elif flow.model.task_type == "defect_detection":
             return PostProcessDefectDetection(flow)
->>>>>>> c305f67 (Defect detection Is ready to merge. (#1))
 
 
 class PostProcessClassification(PostProcess):
@@ -371,7 +368,6 @@ class PostProcessSegmentation(PostProcess):
         b_map = (inp * 30).astype(np.uint8)
 
         return cv2.merge((r_map, g_map, b_map))
-<<<<<<< HEAD
 
 class PostProcessKeypointDetection(PostProcess):
 
@@ -381,45 +377,10 @@ class PostProcessKeypointDetection(PostProcess):
     def __call__(self, img, results):
         """
         Post process function for keypoint detection
-=======
-    
-class PostProcessDefectDetection(PostProcess):
-    def __init__(self, flow):
-        super().__init__(flow)
-
-        # initialize dashboard
-        overview = [0,0,0]
-        defects_num = [0,0,0]
-        # extract class names from model
-        self.defects_class_names = []
-        for i in range(1,len(self.model.classnames)): 
-            self.defects_class_names.append(self.model.classnames[i])
-
-        # initialize dashboard
-        self.db = dashboard.Dashboard(overview, defects_num, self.defects_class_names)
-
-        # initialize object tracker
-        self.ot = objects_tracker.ObjectTracker(self.model)
-
-        # keep track of total products
-        self.total_objects_start = 0
-        # keep track of production rate
-        self.prod_rate = 0
-        # variables for production rate calculation
-        # time at the beginning of a minute period
-        self.start_minute = time()
-        # total number of produced unites at a beginning of a minute
-        self.prod_start_minute = 0
-
-    def __call__(self, img, results):
-        """
-        Post process function for detection
->>>>>>> c305f67 (Defect detection Is ready to merge. (#1))
         Args:
             img: Input frame
             results: output of inference
         """
-<<<<<<< HEAD
         output = np.squeeze(results[0])
 
         scale_x = img.shape[1] / self.model.resize[0]
@@ -506,7 +467,42 @@ class PostProcessDefectDetection(PostProcess):
 
 
         return img
-=======
+    
+class PostProcessDefectDetection(PostProcess):
+    def __init__(self, flow):
+        super().__init__(flow)
+
+        # initialize dashboard
+        overview = [0,0,0]
+        defects_num = [0,0,0]
+        # extract class names from model
+        self.defects_class_names = []
+        for i in range(1,len(self.model.classnames)): 
+            self.defects_class_names.append(self.model.classnames[i])
+
+        # initialize dashboard
+        self.db = dashboard.Dashboard(overview, defects_num, self.defects_class_names)
+
+        # initialize object tracker
+        self.ot = objects_tracker.ObjectTracker(self.model)
+
+        # keep track of total products
+        self.total_objects_start = 0
+        # keep track of production rate
+        self.prod_rate = 0
+        # variables for production rate calculation
+        # time at the beginning of a minute period
+        self.start_minute = time()
+        # total number of produced unites at a beginning of a minute
+        self.prod_start_minute = 0
+
+    def __call__(self, img, results):
+        """
+        Post process function for detection
+        Args:
+            img: Input frame
+            results: output of inference
+        """
         for i, r in enumerate(results):
             r = np.squeeze(r)
             if r.ndim == 1:
@@ -633,4 +629,3 @@ class PostProcessDefectDetection(PostProcess):
                 text_color,
             )
         return frame
->>>>>>> c305f67 (Defect detection Is ready to merge. (#1))
