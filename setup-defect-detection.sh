@@ -32,7 +32,8 @@
 
 cd $(dirname $0)
 WGET="wget --proxy off"
-URL_MODEL="https://software-dl.ti.com/jacinto7/esd/edgeai-marketplace/defect-detection/defect-detection-modelartifacts.tar.gz"
+# URL_MODEL_8_6="https://software-dl.ti.com/jacinto7/esd/edgeai-marketplace/defect-detection/defect-detection-modelartifacts.tar.gz"
+URL_MODEL="https://software-dl.ti.com/jacinto7/esd/edgeai-marketplace/defect-detection/09_00_00/defect-detection-modelartifacts.tar.gz"
 URL_TEST="https://software-dl.ti.com/jacinto7/esd/edgeai-marketplace/defect-detection/defect-detection-test.tar.gz"
 
 
