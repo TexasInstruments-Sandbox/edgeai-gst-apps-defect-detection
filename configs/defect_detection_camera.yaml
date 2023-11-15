@@ -2,17 +2,16 @@ title: "Defect Detection"
 log_level: 2
 inputs:
     input0:
-        source: /dev/video8
+        source: /dev/video-usb-cam0
         format: jpeg
         width: 1280
         height: 720
         framerate: 30
     input1:
-        source: /dev/video2
+        source: /dev/video3
         width: 1920
         height: 1080
         format: rggb
-        subdev-id: 2
         framerate: 30
     input2:
         source: /opt/edgeai-test-data/videos/defect_detection_test.h264
