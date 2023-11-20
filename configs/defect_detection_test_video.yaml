@@ -23,7 +23,7 @@ inputs:
     
 models:                                                                           
     model0:             
-        model_path: /opt/model_zoo/defect-detection_yolox-nano-lite
+        model_path: /opt/model_zoo/defect-detection-yolox-nano-lite
         viz_threshold: 0.6 
         
 outputs:
