@@ -42,6 +42,12 @@ exit_setup()
 
 source ./scripts/detect_soc.sh
 
+# Install EdgeAI Apps Utils
+./scripts/install_apps_utils.sh $*
+if [ "$?" -ne "0" ]; then
+    exit_setup
+fi
+
 # Install DL Inferer library and its depencendy
 ./scripts/install_dl_inferer.sh $*
 if [ "$?" -ne "0" ]; then
@@ -76,11 +82,6 @@ fi
 ./scripts/install_ti_gpio_libs.sh $*
 if [ "$?" -ne "0" ]; then
     exit_setup
-fi
-
-# Install streamlit
-if [ `arch` == "aarch64" ]; then
-    pip3 install streamlit --disable-pip-version-check
 fi
 
 cd $current_dir

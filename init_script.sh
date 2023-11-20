@@ -40,7 +40,7 @@ cd $(dirname "$(readlink -f "$BASH_SOURCE")")
 
 source ./scripts/detect_soc.sh
 
-export PYTHONPATH=/usr/lib/python3.8/site-packages/
+export PYTHONPATH=/usr/lib/python3.10/site-packages/
 
 # Disable Neo-DLR phone-home feature
 echo '{"enable_phone_home": false}' > $PYTHONPATH/dlr/counter/ccm_config.json
@@ -53,7 +53,7 @@ rm -rf /usr/lib/libtidl_tfl_delegate.so.map
 
 # Link headers and libraries for DLR
 mkdir -p /usr/dlr/
-ln -snf /usr/lib/python3.8/site-packages/dlr/libdlr.so /usr/dlr/libdlr.so
+ln -snf /usr/lib/python3.10/site-packages/dlr/libdlr.so /usr/dlr/libdlr.so
 ln -snf /usr/dlr/libdlr.so /usr/lib/libdlr.so
 
 ldconfig
@@ -65,9 +65,17 @@ rm -rf ~/.cache/gstreamer-1.0/registry.aarch64.bin
 k3conf set clock 290 0 720000000 &> /dev/null
 k3conf set clock 48 0 480000000 &> /dev/null
 
+# Increase ulimits for number of open files, to support multi channel demo
+ulimit -Sn 10240
+ulimit -Hn 40960
+
+# Set primary plane z-pos to 0
+PRIMARY_PLANE_ID=`kmsprint | grep -i plane | cut -d "(" -f2 | cut -d ")" -f1`
+modetest -M tidss -w $PRIMARY_PLANE_ID:zpos:0 &> /dev/null
+
 export EDGEAI_GST_APPS_PATH=/opt/edgeai-gst-apps
 export EDGEAI_DATA_PATH=/opt/edgeai-test-data
 export OOB_DEMO_ASSETS_PATH=/opt/oob-demo-assets
 export MODEL_ZOO_PATH=/opt/model_zoo
-export EDGEAI_VERSION=8.6
-export EDGEAI_SDK_VERSION=08_06_00
+export EDGEAI_VERSION=9.1
+export EDGEAI_SDK_VERSION=09_01_00

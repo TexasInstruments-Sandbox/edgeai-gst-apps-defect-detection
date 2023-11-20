@@ -2,16 +2,16 @@ title: "Multi Input, Multi Inference"
 log_level: 2
 inputs:
     input0:
-        source: /dev/video2
+        source: /dev/video-usb-cam0
         format: jpeg
         width: 1280
         height: 720
         framerate: 30
     input1:
-        source: /opt/edgeai-test-data/videos/video_0000_h264.h264
+        source: /opt/edgeai-test-data/videos/video0_1280_768.h264
         format: h264
         width: 1280
-        height: 720
+        height: 768
         framerate: 30
         loop: True
     input2:
@@ -23,13 +23,13 @@ inputs:
         loop: True
 models:
     model0:
-        model_path: /opt/model_zoo/TFL-OD-2010-ssd-mobV2-coco-mlperf-300x300
+        model_path: /opt/model_zoo/TFL-OD-2020-ssdLite-mobDet-DSP-coco-320x320
         viz_threshold: 0.6
     model1:
         model_path: /opt/model_zoo/ONR-OD-8200-yolox-nano-lite-mmdet-coco-416x416
         viz_threshold: 0.6
     model2:
-        model_path: /opt/model_zoo/TFL-CL-0000-mobileNetV1-mlperf
+        model_path: /opt/model_zoo/ONR-CL-6360-regNetx-200mf
         topN: 5
     model3:
         model_path: /opt/model_zoo/ONR-SS-8610-deeplabv3lite-mobv2-ade20k32-512x512
@@ -39,7 +39,7 @@ outputs:
         sink: kmssink
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output1:
         sink: /opt/edgeai-test-data/output/output_video.mkv
         width: 1920
@@ -48,15 +48,17 @@ outputs:
         sink: /opt/edgeai-test-data/output/output_image_%04d.jpg
         width: 1920
         height: 1080
-
-deubgs:
-    debug0:
-        suffix-dir: dir1
-    debug1:
-        suffix-dir: dir2
+    output3:
+        sink: remote
+        width: 1920
+        height: 1080
+        port: 8081
+        host: 127.0.0.1
+        encoding: jpeg
+        overlay-perf-type: graph
 
 flows:
-    flow0: [input0,model0,output0,[320,180,640,360]]
-    flow1: [input0,model1,output0,[960,180,640,360]]
-    flow2: [input1,model2,output0,[320,560,640,360]]
-    flow3: [input1,model3,output0,[960,560,640,360]]
+    flow0: [input0,model0,output0,[320,150,640,360]]
+    flow1: [input0,model1,output0,[960,150,640,360]]
+    flow2: [input1,model2,output0,[320,530,640,360]]
+    flow3: [input1,model3,output0,[960,530,640,360]]

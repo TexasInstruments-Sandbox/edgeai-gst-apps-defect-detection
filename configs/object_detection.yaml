@@ -2,16 +2,16 @@ title: "Object Detection"
 log_level: 2
 inputs:
     input0:
-        source: /dev/video2
+        source: /dev/video-usb-cam0
         format: jpeg
         width: 1280
         height: 720
         framerate: 30
     input1:
-        source: /opt/edgeai-test-data/videos/video_0000_h264.h264
+        source: /opt/edgeai-test-data/videos/video0_1280_768.h264
         format: h264
         width: 1280
-        height: 720
+        height: 768
         framerate: 30
         loop: True
     input2:
@@ -26,7 +26,7 @@ models:
         model_path: /opt/model_zoo/TVM-OD-5120-ssdLite-mobDet-DSP-coco-320x320
         viz_threshold: 0.6
     model1:
-        model_path: /opt/model_zoo/TFL-OD-2010-ssd-mobV2-coco-mlperf-300x300
+        model_path: /opt/model_zoo/TFL-OD-2020-ssdLite-mobDet-DSP-coco-320x320
         viz_threshold: 0.6
     model2:
         model_path: /opt/model_zoo/ONR-OD-8200-yolox-nano-lite-mmdet-coco-416x416
@@ -36,17 +36,23 @@ outputs:
         sink: kmssink
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output1:
         sink: /opt/edgeai-test-data/output/output_video0.mkv
         width: 1920
         height: 1080
     output2:
+        sink: /opt/edgeai-test-data/output/output_image_%04d.jpg
+        width: 1920
+        height: 1080
+    output3:
         sink: remote
-        width: 1280
-        height: 720
+        width: 1920
+        height: 1080
         port: 8081
-        host: 0.0.0.0
+        host: 127.0.0.1
+        encoding: jpeg
+        overlay-perf-type: graph
 
 flows:
-    flow0: [input1,model2,output0,[320,180,1280,720]]
+    flow0: [input1,model2,output0,[320,150,1280,720]]

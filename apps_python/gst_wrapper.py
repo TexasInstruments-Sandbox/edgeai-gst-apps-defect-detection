@@ -534,7 +534,7 @@ def get_input_elements(input):
         video_dec["h264"].append(
             [gst_element_map["h264dec"]["element"], property, None]
         )
-        property = {"pool-size": 8}
+        property = {"pool-size": 12}
         caps = "video/x-raw, format=NV12"
         video_dec["h264"].append(["tiovxmemalloc", property, caps])
     else:
@@ -549,7 +549,7 @@ def get_input_elements(input):
         video_dec["h265"].append(
             [gst_element_map["h265dec"]["element"], property, None]
         )
-        property = {"pool-size": 8}
+        property = {"pool-size": 12}
         caps = "video/x-raw, format=NV12"
         video_dec["h265"].append(["tiovxmemalloc", property, caps])
     else:
@@ -641,7 +641,7 @@ def get_input_elements(input):
             # TODO - Take sensor name and subdev as params
             property = {
                 "sensor-name": sen_name,
-                "dcc-isp-file": "/opt/imaging/%s/dcc_viss.bin" % input.sen_id,
+                "dcc-isp-file": "/opt/imaging/%s/linear/dcc_viss.bin" % input.sen_id,
                 "format-msb": format_msb,
             }
 
@@ -659,7 +659,7 @@ def get_input_elements(input):
             if input.ldc:
                 property = {
                     "sensor-name": sen_name,
-                    "dcc-file": "/opt/imaging/%s/dcc_ldc.bin" % input.sen_id,
+                    "dcc-file": "/opt/imaging/%s/linear/dcc_ldc.bin" % input.sen_id,
                 }
 
                 global ldc_target_idx
@@ -757,7 +757,6 @@ def get_input_elements(input):
             caps_string = "video/x-" + input.format
             caps_string += ",width=%d,height=%d,framerate=%s" % (input.width,input.height,input.fps)
             property["caps"] = Gst.caps_from_string(caps_string)
-
         element = make_element("multifilesrc", property=property)
         input_element_list += element
         for i in video_dec[input.format]:
@@ -900,21 +899,21 @@ def get_output_elements(output):
     Args:
         output: output configuration
     """
-    image_enc = {".jpg": "jpegenc"}
+
+    prop_str = "video_bitrate=%d,video_gop_size=%d" \
+                                              % (output.bitrate,output.gop_size)
+    enc_extra_ctrl = "controls,frame_level_rate_control_enable=1," + prop_str
 
     video_enc = {
         ".mov": [
-            ["v4l2h264enc", {"bitrate": output.bitrate}],
             ["h264parse", None],
             ["qtmux", None],
         ],
         ".mp4": [
-            ["v4l2h264enc", {"bitrate": output.bitrate}],
             ["h264parse", None],
             ["mp4mux", None],
         ],
         ".mkv": [
-            ["v4l2h264enc", {"bitrate": output.bitrate}],
             ["h264parse", None],
             ["matroskamux", None],
         ],
@@ -924,9 +923,10 @@ def get_output_elements(output):
     bg_elements = []
     mosaic_elements = []
 
-    if output.overlay_performance:
+    if output.overlay_perf_type != None:
         sink_elements += make_element("queue")
-        property = {"title":output.title}
+        property = {"title":output.title,
+                    "overlay-type":output.overlay_perf_type}
         sink_elements += make_element("tiperfoverlay",property=property)
 
     sink_ext = os.path.splitext(output.sink)[1]
@@ -940,7 +940,7 @@ def get_output_elements(output):
     ):
         if sink_ext in video_enc:
             sink = "video"
-        elif sink_ext in image_enc:
+        elif sink_ext == ".jpg":
             sink = "image"
         else:
             sink = "others"
@@ -956,38 +956,56 @@ def get_output_elements(output):
         sink_elements += make_element("kmssink", property=property)
 
     elif sink == "image":
-        sink_elements += make_element(image_enc[sink_ext])
+        sink_elements += make_element(gst_element_map["jpegenc"])
         sink_elements += make_element(
             "multifilesink", property={"location": output.sink, "name": sink_name}
         )
 
     elif sink == "video":
+        property = {}
+        if (gst_element_map["h264enc"]["element"] == "v4l2h264enc"):
+            property = {"extra-controls": Gst.Structure.from_string(enc_extra_ctrl)[0]}
+
+        sink_elements += make_element(gst_element_map["h264enc"], property=property)
+
         for i in video_enc[sink_ext]:
             sink_elements += make_element(i[0], property=i[1])
-        sink_elements += make_element(
-            "filesink", property={"location": output.sink, "name": sink_name}
-        )
+
+        property={"location": output.sink, "name": sink_name}
+        sink_elements += make_element("filesink", property=property)
 
     elif sink == "remote":
         property = {}
-        if output.encoder == "v4l2h264enc":
-            property = {"gop-size": output.gop_size, "bitrate": output.bitrate}
 
-        sink_elements += make_element(output.encoder, property=property)
+        # MP4 or H264 encoding
+        if output.encoding == "mp4" or output.encoding == "h264":
+            if (gst_element_map["h264enc"]["element"] == "v4l2h264enc"):
+                property = {"extra-controls": Gst.Structure.from_string(enc_extra_ctrl)[0]}
 
-        if output.encoder == "v4l2h264enc":
+            sink_elements += make_element(gst_element_map["h264enc"], property=property)
+
             sink_elements += make_element("h264parse")
 
-        if output.payloader == "mp4mux":
-            property = {"fragment-duration":1}
-        elif output.payloader == "multipartmux":
+            if output.encoding == "mp4":
+                property = {"fragment-duration":1}
+                sink_elements += make_element("mp4mux", property=property)
+            elif output.encoding == "h264":
+                sink_elements += make_element("rtph264pay")
+
+        # Jpeg encoding
+        elif output.encoding == "jpeg":
+
+            sink_elements += make_element(gst_element_map["jpegenc"])
+
             property = {"boundary":"spionisto"}
+            sink_elements += make_element("multipartmux",property=property)
 
-        sink_elements += make_element(output.payloader, property=property)
-
-        if output.payloader == "multipartmux":
             property = {"max":65000}
             sink_elements += make_element("rndbuffersize", property=property)
+
+        else:
+            print("[ERROR] Wrong encoding [%s] defined for remote output.", output.encoding)
+            sys.exit()
 
         property = {
             "host": output.host,
@@ -1022,8 +1040,11 @@ def get_output_elements(output):
         property = {
             "name": "mosaic_" + str(output.id),
             "background": background,
-            "target": 1,
         }
+
+        if gst_element_map["mosaic"]["element"] == "tiovxmosaic":
+            property["target"] = 1
+
         caps = "video/x-raw,format=NV12, width=%d, height=%d" % (
             output.width,
             output.height,
@@ -1055,19 +1076,19 @@ def get_pre_proc_elements(flow):
     layout = 0 if flow.model.data_layout == "NCHW" else 1
     tensor_fmt = "bgr" if (flow.model.reverse_channels) else "rgb"
 
-    if flow.model.data_type == np.int8:
+    if flow.model.input_tensor_types[0] == np.int8:
         data_type = 2
-    elif flow.model.data_type == np.uint8:
+    elif flow.model.input_tensor_types[0] == np.uint8:
         data_type = 3
-    elif flow.model.data_type == np.int16:
+    elif flow.model.input_tensor_types[0] == np.int16:
         data_type = 4
-    elif flow.model.data_type == np.uint16:
+    elif flow.model.input_tensor_types[0] == np.uint16:
         data_type = 5
-    elif flow.model.data_type == np.int32:
+    elif flow.model.input_tensor_types[0] == np.int32:
         data_type = 6
-    elif flow.model.data_type == np.uint32:
+    elif flow.model.input_tensor_types[0] == np.uint32:
         data_type = 7
-    elif flow.model.data_type == np.float32:
+    elif flow.model.input_tensor_types[0] == np.float32:
         data_type = 10
     else:
         print("[ERROR] Unsupported data type for input tensor")
@@ -1092,17 +1113,18 @@ def get_pre_proc_elements(flow):
             )
 
         property["tensor-format"] = tensor_fmt
+  
+        if "property" in gst_element_map["dlpreproc"]:
+            if "target" in gst_element_map["dlpreproc"]["property"]:
+                property["target"] = gst_element_map["dlpreproc"]["property"]["target"][preproc_target_idx]
+                preproc_target_idx += 1
+                if preproc_target_idx >= len(gst_element_map["dlpreproc"]["property"]["target"]):
+                    preproc_target_idx = 0
 
-        if "target" in gst_element_map["dlpreproc"]["property"]:
-            property["target"] = gst_element_map["dlpreproc"]["property"]["target"][preproc_target_idx]
-            preproc_target_idx += 1
-            if preproc_target_idx >= len(gst_element_map["dlpreproc"]["property"]["target"]):
-                preproc_target_idx = 0
-
-        if "out-pool-size" in gst_element_map["dlpreproc"]["property"]:
-            property["out-pool-size"] = gst_element_map["dlpreproc"]["property"][
-                "out-pool-size"
-            ]
+            if "out-pool-size" in gst_element_map["dlpreproc"]["property"]:
+                property["out-pool-size"] = gst_element_map["dlpreproc"]["property"][
+                    "out-pool-size"
+                ]
 
         caps = "application/x-tensor-tiovx"
 
@@ -1187,10 +1209,13 @@ def get_color_convert_config(input_format, output_format):
         output_format: Output format
     """
     tiovxdlcc_combimations = {
-        "RGB": ["NV12"],
         "NV12": ["RGB", "I420"],
-        "I420": ["NV12"],
         "NV21": ["RGB", "I420"],
+        "RGB": ["NV12"],
+        "I420": ["NV12"],
+        "UYVY": ["NV12"],
+        "YUY2": ["NV12"],
+        "GRAY8": ["NV12"]
     }
 
     dl_color_convert_element_factory = Gst.ElementFactory.find(
@@ -1273,11 +1298,10 @@ def get_gst_pipe(flows, outputs):
         # sink property are exposed only once element is added to bin and linked
         for elem in f.input.gst_inp_elements:
             if elem.get_factory().get_name() == "tiovxisp":
-                dcc_2a_file = "/opt/imaging/%s/dcc_2a.bin" % f.input.sen_id
+                dcc_2a_file = "/opt/imaging/%s/linear/dcc_2a.bin" % f.input.sen_id
                 Gst.ChildProxy.set_property(elem, "sink_0::dcc-2a-file", dcc_2a_file)
                 if not f.input.format.startswith("bggi"):
-                    device = "/dev/v4l-subdev%d" % f.input.subdev_id
-                    Gst.ChildProxy.set_property(elem, "sink_0::device", device)
+                    Gst.ChildProxy.set_property(elem, "sink_0::device", f.input.subdev_id)
 
         # Get format of last input element after caps negotiation
         input_format = get_format(gst_player, f.input.gst_inp_elements)
@@ -1525,25 +1549,39 @@ def get_gst_pipe(flows, outputs):
                     )
 
                     # Set Mosaic Property
-                    startx = GObject.ValueArray()
-                    startx.append(GObject.Value(GObject.TYPE_INT, mosaic_x))
-                    starty = GObject.ValueArray()
-                    starty.append(GObject.Value(GObject.TYPE_INT, mosaic_y))
-                    widths = GObject.ValueArray()
-                    widths.append(GObject.Value(GObject.TYPE_INT, mosaic_w))
-                    heights = GObject.ValueArray()
-                    heights.append(GObject.Value(GObject.TYPE_INT, mosaic_h))
+                    if gst_element_map["mosaic"]["element"] == "tiovxmosaic":
+                        startx = GObject.ValueArray()
+                        startx.append(GObject.Value(GObject.TYPE_INT, mosaic_x))
+                        starty = GObject.ValueArray()
+                        starty.append(GObject.Value(GObject.TYPE_INT, mosaic_y))
+                        widths = GObject.ValueArray()
+                        widths.append(GObject.Value(GObject.TYPE_INT, mosaic_w))
+                        heights = GObject.ValueArray()
+                        heights.append(GObject.Value(GObject.TYPE_INT, mosaic_h))
+                        Gst.ChildProxy.set_property(
+                            mosaic, "sink_%d::widths" % o.num_mosaic_sink, widths
+                        )
+                        Gst.ChildProxy.set_property(
+                            mosaic, "sink_%d::heights" % o.num_mosaic_sink, heights
+                        )
+
+                    else:
+                        startx = GObject.Value(GObject.TYPE_INT, mosaic_x)
+                        starty = GObject.Value(GObject.TYPE_INT, mosaic_y)
+                        width = GObject.Value(GObject.TYPE_INT, mosaic_w)
+                        height = GObject.Value(GObject.TYPE_INT, mosaic_h)
+                        Gst.ChildProxy.set_property(
+                            mosaic, "sink_%d::width" % o.num_mosaic_sink, width
+                        )
+                        Gst.ChildProxy.set_property(
+                            mosaic, "sink_%d::height" % o.num_mosaic_sink, height
+                        )
+
                     Gst.ChildProxy.set_property(
                         mosaic, "sink_%d::startx" % o.num_mosaic_sink, startx
                     )
                     Gst.ChildProxy.set_property(
                         mosaic, "sink_%d::starty" % o.num_mosaic_sink, starty
-                    )
-                    Gst.ChildProxy.set_property(
-                        mosaic, "sink_%d::widths" % o.num_mosaic_sink, widths
-                    )
-                    Gst.ChildProxy.set_property(
-                        mosaic, "sink_%d::heights" % o.num_mosaic_sink, heights
                     )
 
                     # Increase mosaic sink count for this output by 1
@@ -1556,8 +1594,10 @@ def get_gst_pipe(flows, outputs):
                         )
                     link_elements(o.gst_mosaic_elements[-1], o.gst_disp_elements[0])
 
-                    if (o.overlay_performance):
-                        Gst.ChildProxy.set_property(mosaic, "src::pool-size", 3)
+                    if (o.overlay_perf_type != None
+                        and
+                        gst_element_map["mosaic"]["element"] == "tiovxmosaic"):
+                        Gst.ChildProxy.set_property(mosaic, "src::pool-size", 4)
 
                 else:
                     """

@@ -146,12 +146,8 @@ run_single_test() {
 		start_cpuload_measurement $((timeout - 1)) &
 	fi
 
-    # Run the app with the timeout and force kill the test 4 after seconds
-    if grep -q "OPTIFLOW" <<< "$test_name"; then
-        timeout -s INT -k $(($timeout + 4)) $timeout `$test_command` >> $stdout 2> $stderr
-    else
-	    timeout -s INT -k $(($timeout + 4)) $timeout $test_command >> $stdout 2> $stderr
-    fi
+    # Run the app with the timeout and force kill the test 5 after seconds
+	timeout --preserve-status --foreground -s INT -k $(($timeout + 5)) $timeout $test_command >> $stdout 2> $stderr
 	test_status=$?
 
 	if [ "$measure_cpuload" == "true" ]; then
@@ -167,11 +163,7 @@ run_single_test() {
 
 	if [ "$parse_script" != "null" ]; then
 		cd $topdir/tests/
-        if grep -q "OPTIFLOW" <<< "$test_name"; then
-            parse_command="$parse_script $stdout"
-		else
-            parse_command="$parse_script $test_name $stdout $stderr $test_status $cpuload"
-        fi
+		parse_command="$parse_script $stdout"
 		debug "Running $BRIGHTWHITE$parse_command$NOCOLOR"
 
 		$parse_command
@@ -267,7 +259,7 @@ for model_path in $(eval $searchcmd); do
 			test_dir="$topdir/apps_cpp/"
 			test_app=$cpp_app
     elif [[ "$test_suite" = "OPTIFLOW"* ]]; then
-            test_dir="$topdir/scripts/optiflow"
+            test_dir="$topdir/optiflow"
             test_app=$optiflow_app
 	else
 		echo "ERROR: test_suite should start with either of PY, CPP"
@@ -285,7 +277,7 @@ for model_path in $(eval $searchcmd); do
 	# This way, logs will not be overwritten
 	tname="$test_suite"_"$model"
     if [[ "$test_suite" = "OPTIFLOW"* ]]; then
-        command="$test_app -t $config_file"
+        command="$test_app $config_file"
 	else
 	    command="$test_app -n -v $config_file"
     fi

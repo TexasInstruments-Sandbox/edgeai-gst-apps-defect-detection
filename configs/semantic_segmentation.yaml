@@ -2,16 +2,16 @@ title: "Semantic Segmentation"
 log_level: 2
 inputs:
     input0:
-        source: /dev/video2
+        source: /dev/video-usb-cam0
         format: jpeg
         width: 1280
         height: 720
         framerate: 30
     input1:
-        source: /opt/edgeai-test-data/videos/video_0000_h264.h264
+        source: /opt/edgeai-test-data/videos/video0_1280_768.h264
         format: h264
         width: 1280
-        height: 720
+        height: 768
         framerate: 30
         loop: True
     input2:
@@ -36,7 +36,7 @@ outputs:
         sink: kmssink
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output1:
         sink: /opt/edgeai-test-data/output/output_video.mkv
         width: 1920
@@ -45,6 +45,14 @@ outputs:
         sink: /opt/edgeai-test-data/output/output_image_%04d.jpg
         width: 1920
         height: 1080
+    output3:
+        sink: remote
+        width: 1920
+        height: 1080
+        port: 8081
+        host: 127.0.0.1
+        encoding: jpeg
+        overlay-perf-type: graph
 
 flows:
-    flow0: [input1,model2,output0,[320,180,1280,720]]
+    flow0: [input1,model2,output0,[320,150,1280,720]]

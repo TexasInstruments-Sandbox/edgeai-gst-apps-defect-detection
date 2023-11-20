@@ -32,6 +32,7 @@ import gst_wrapper
 import utils
 import sys
 import os
+from gst_element_map import gst_element_map
 
 class Input:
     """
@@ -71,7 +72,7 @@ class Input:
         if 'subdev-id' in input_config:
             self.subdev_id = input_config['subdev-id']
         else:
-            self.subdev_id = 2
+            self.subdev_id = "/dev/v4l-subdev2"
         if 'ldc' in input_config:
             self.ldc = input_config['ldc']
         else:
@@ -84,15 +85,22 @@ class Input:
         Input.count += 1
         self.split_count = 0
         self.splits = 0
+        self.roi_strings = []
+        self.roi_string = ''
+        self.msc_target_string = ''
         self.gst_str = gst_wrapper.get_input_str(self)
         self.input_format = utils.get_format(self.gst_str)
 
-    def get_split_name(self):
+    def get_split_name(self,flow):
+        if self.splits % 4 == 0:
+            if self.roi_string != '':
+                self.roi_strings.append(self.roi_string)
+            self.roi_string = ''
         self.splits += 1
         self.split_count = int(self.splits/4)
         if self.splits % 4:
             self.split_count += 1
-        self.gst_split_str = gst_wrapper.get_input_split_str(self)
+        self.gst_split_str = gst_wrapper.get_input_split_str(self,flow)
         return 'split_%d%d' % (self.id, self.split_count)
 
 class Output:
@@ -124,11 +132,30 @@ class Output:
             self.host = output_config['host']
         else:
             self.host = '0.0.0.0'
-        self.mosaic = True
+        if 'encoding' in output_config:
+            self.encoding = output_config['encoding']
+        else:
+            self.encoding = 'h264'
+        if 'gop-size' in output_config:
+            self.gop_size = output_config['gop-size']
+        else:
+            self.gop_size = 30
+        if 'bitrate' in output_config:
+            self.bitrate = output_config['bitrate']
+        else:
+            self.bitrate = 10000000
+        if 'overlay-perf-type' in output_config:
+            self.overlay_perf_type = output_config['overlay-perf-type']
+        else:
+            self.overlay_perf_type = None
+        self.mosaic = False
         self.id = Output.count
-        self.gst_mosaic_str, self.gst_disp_str = gst_wrapper.get_output_str(self)
         self.subflows = []
         Output.count += 1
+
+    def set_mosaic(self):
+        self.mosaic = (gst_element_map["mosaic"]) != None
+        self.gst_mosaic_str, self.gst_disp_str = gst_wrapper.get_output_str(self)
 
     def get_disp_id(self, subflow, fps):
         """
@@ -156,12 +183,20 @@ class Output:
         disp_id = len(self.subflows)
         self.subflows.append(subflow)
         if (self.mosaic):
-            self.gst_mosaic_str = self.gst_mosaic_str + \
-                         'sink_%d::startx="<%d>"  ' % (disp_id, subflow.x_pos) + \
-                         'sink_%d::starty="<%d>"  ' % (disp_id, subflow.y_pos) + \
-                         'sink_%d::widths="<%d>"   ' % (disp_id, subflow.width) + \
-                         'sink_%d::heights="<%d>"  ' % (disp_id, subflow.height) + \
-                          '\\\n'
+            if gst_element_map["mosaic"]["element"] == "tiovxmosaic":
+                self.gst_mosaic_str = self.gst_mosaic_str + \
+                            'sink_%d::startx="<%d>" ' % (disp_id, subflow.x_pos) + \
+                            'sink_%d::starty="<%d>" ' % (disp_id, subflow.y_pos) + \
+                            'sink_%d::widths="<%d>" ' % (disp_id, subflow.width) + \
+                            'sink_%d::heights="<%d>" ' % (disp_id, subflow.height) + \
+                            '\\\n'
+            else:
+                self.gst_mosaic_str = self.gst_mosaic_str + \
+                            'sink_%d::startx=%d ' % (disp_id, subflow.x_pos) + \
+                            'sink_%d::starty=%d ' % (disp_id, subflow.y_pos) + \
+                            'sink_%d::width=%d ' % (disp_id, subflow.width) + \
+                            'sink_%d::height=%d ' % (disp_id, subflow.height) + \
+                            '\\\n'
         if fps > self.fps:
             self.fps = fps
         return disp_id

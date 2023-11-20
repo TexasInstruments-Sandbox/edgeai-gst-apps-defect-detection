@@ -54,7 +54,7 @@ using namespace cv;
 #define INVOKE_OVERLAY_CLASS_LOGIC(T)                    \
     overlayTopNClasses(frameData,                        \
                        reinterpret_cast<T*>(buff->data), \
-                       m_config.classnames,              \
+                       m_config.datasetInfo,             \
                        getDebugObj(),                    \
                        m_config.outDataWidth,            \
                        m_config.outDataHeight,           \
@@ -65,7 +65,7 @@ using namespace cv;
 #define INVOKE_OVERLAY_CLASS_LOGIC(T)                    \
     overlayTopNClasses(frameData,                        \
                        reinterpret_cast<T*>(buff->data), \
-                       m_config.classnames,              \
+                       m_config.datasetInfo,             \
                        m_config.outDataWidth,            \
                        m_config.outDataHeight,           \
                        labelOffset,                      \
@@ -168,29 +168,38 @@ static vector<tuple<T, int32_t>> get_topN(T        *data,
   * @returns original frame with some in-place post processing done
   */
 template <typename T1, typename T2>
-static T1 *overlayTopNClasses(T1                   *frame,
-                              T2                   *results,
-                              map<int32_t,string>   classnames,
+static T1 *overlayTopNClasses(T1                        *frame,
+                              T2                        *results,
+                              map<int32_t,DatasetInfo>  datasetInfo,
 #if defined(EDGEAI_ENABLE_OUTPUT_FOR_TEST)
-                              DebugDump            &debugObj,
+                              DebugDump                 &debugObj,
 #endif // defined(EDGEAI_ENABLE_OUTPUT_FOR_TEST)
-                              int32_t               outDataWidth,
-                              int32_t               outDataHeight,
-                              int32_t               labelOffset,
-                              int32_t               N,
-                              int32_t               size)
+                              int32_t                   outDataWidth,
+                              int32_t                   outDataHeight,
+                              int32_t                   labelOffset,
+                              int32_t                   N,
+                              int32_t                   size)
 {
     vector<tuple<T2,int32_t>> argmax;
     float txtSize = static_cast<float>(outDataWidth)/POSTPROC_DEFAULT_WIDTH;
     int   rowSize = 40 * outDataWidth/POSTPROC_DEFAULT_WIDTH;
-    Scalar text_color(200, 200, 200);
+    Scalar text_color(255, 255, 0);
+    Scalar text_bg_color(5, 11, 120);
 
     argmax = get_topN<T2>(results, N, size);
     Mat img = Mat(outDataHeight, outDataWidth, CV_8UC3, frame);
 
     std::string title = "Recognized Classes (Top " + std::to_string(N) + "):";
-    putText(img, title.c_str(), Point(5, 2 * rowSize),
-            FONT_HERSHEY_SIMPLEX, txtSize, Scalar(0, 255, 0), 2);
+
+    Size totalTextSize = getTextSize(title, FONT_HERSHEY_SIMPLEX, txtSize, 2, nullptr);
+
+    Point bgTopleft = Point(0, (2 * rowSize) - totalTextSize.height - 5);
+    Point bgBottomRight = Point(totalTextSize.width + 10, (2 * rowSize) + 3 + 5);
+    Point fontCoord = Point(5, 2 * rowSize);
+
+    rectangle(img, bgTopleft, bgBottomRight, text_bg_color, -1);
+    putText(img, title.c_str(), fontCoord, FONT_HERSHEY_SIMPLEX, txtSize,
+            Scalar(0, 255, 0), 2);
 
 #if defined(EDGEAI_ENABLE_OUTPUT_FOR_TEST)
     string output;
@@ -202,15 +211,36 @@ static T1 *overlayTopNClasses(T1                   *frame,
 
         if (index >= 0)
         {
-            string str = classnames.at(index);
+            string str;
+
+            if (datasetInfo.find(index) != datasetInfo.end())
+            {
+                str = datasetInfo.at(index).name;
+                if ("" != datasetInfo.at(index).superCategory)
+                {
+                    str = datasetInfo.at(index).superCategory + "/" + str;
+                }
+            }
+            else
+            {
+                str = "UNDEFINED";
+            }
+
             int32_t row = i + 3;
 
 #if defined(EDGEAI_ENABLE_OUTPUT_FOR_TEST)
             output.append(str + "\n");
 #endif // defined(EDGEAI_ENABLE_OUTPUT_FOR_TEST)
 
-            putText(img, str, Point(5, rowSize * row),
-                FONT_HERSHEY_SIMPLEX, txtSize, Scalar(255, 255, 0), 2);
+            totalTextSize = getTextSize(str, FONT_HERSHEY_SIMPLEX, txtSize, 2, nullptr);
+
+            bgTopleft = Point(0, (rowSize * row) - totalTextSize.height - 5);
+            bgBottomRight = Point(totalTextSize.width + 10, (rowSize * row) + 3 + 5);
+            fontCoord = Point(5, rowSize * row);
+
+            rectangle(img, bgTopleft, bgBottomRight, text_bg_color, -1);
+            putText(img, str, fontCoord, FONT_HERSHEY_SIMPLEX, txtSize,
+                    text_color, 2);
         }
     }
 

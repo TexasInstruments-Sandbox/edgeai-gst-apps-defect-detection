@@ -12,10 +12,10 @@ inputs:
         loop: True
 models:
     model0:
-        model_path: /opt/model_zoo/TVM-CL-3090-mobileNetV2-tv
+        model_path: /opt/model_zoo/ONR-CL-6360-regNetx-200mf
         topN: 5
     model1:
-        model_path: /opt/model_zoo/TFL-OD-2010-ssd-mobV2-coco-mlperf-300x300
+        model_path: /opt/model_zoo/TFL-OD-2020-ssdLite-mobDet-DSP-coco-320x320
         viz_threshold: 0.6
     model2:
         model_path: /opt/model_zoo/ONR-SS-8610-deeplabv3lite-mobv2-ade20k32-512x512
@@ -25,7 +25,7 @@ outputs:
         sink: kmssink
         width: 1920
         height: 1080
-        overlay-performance: True
+        overlay-perf-type: graph
     output1:
         sink: /opt/edgeai-test-data/output/output_video.mkv
         width: 1920
@@ -34,7 +34,15 @@ outputs:
         sink: /opt/edgeai-test-data/output/output_image_%04d.jpg
         width: 1920
         height: 1080
+    output3:
+        sink: remote
+        width: 1920
+        height: 1080
+        port: 8081
+        host: 127.0.0.1
+        encoding: jpeg
+        overlay-perf-type: graph
 
 flows:
-    flow0: [input0,model0,output0,[320,180,1280,720]]
+    flow0: [input0,model0,output0,[320,150,1280,720]]
         

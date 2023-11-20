@@ -33,7 +33,7 @@ import sys
 import utils
 import yaml
 
-GST_ELEMENT_MAP_PATH = "/opt/edgeai-gst-apps/configs/gst_plugins_map.yaml"
+GST_ELEMENT_MAP_PATH = "/opt/edgeai-gst-apps-defect-detection/configs/gst_plugins_map.yaml"
 
 
 def parse_gst_element_map():
@@ -59,5 +59,5 @@ def parse_gst_element_map():
 
     return gst_element_map[target]
 
-
+SOC = os.environ.get("SOC")
 gst_element_map = parse_gst_element_map()

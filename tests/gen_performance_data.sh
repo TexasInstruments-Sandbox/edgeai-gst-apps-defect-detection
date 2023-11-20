@@ -12,12 +12,12 @@ PERF="queue ! tiperfoverlay dump=true overlay=false location=$LOG_FILE \
 FILTER=""
 
 ################################################################################
-VIDEO_FILE_MP4_1MP=/opt/edgeai-test-data/videos/video_0000_h264.mp4
-VIDEO_FILE_H264_1MP=/opt/edgeai-test-data/videos/video_0000_h264.h264
-VIDEO_FILE_H264_2MP=/opt/edgeai-test-data/videos/video_0000_h264_2mp.h264
-VIDEO_FILE_H265_2MP=/opt/edgeai-test-data/videos/video_0000_h265_2mp.h265
+VIDEO_FILE_MP4_1MP=/opt/edgeai-test-data/videos/video0_1280_768_h264.mp4
+VIDEO_FILE_H264_1MP=/opt/edgeai-test-data/videos/video0_1280_768.h264
+VIDEO_FILE_H264_2MP=/opt/edgeai-test-data/videos/video0_1920_1088.h264
+VIDEO_FILE_H265_2MP=/opt/edgeai-test-data/videos/video0_1920_1088.h265
 
-VIDEOTESTSRC_2MP="videotestsrc pattern=4 num-buffers=600 is-live=true ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1"
+VIDEOTESTSRC_2MP="videotestsrc pattern=4 num-buffers=600 is-live=true ! video/x-raw,format=NV12,width=1920,height=1088,framerate=30/1"
 
 if [ "$SOC" == "j721e" ]
 then
@@ -43,7 +43,7 @@ VIDEO_H264_2MP()
   cp $VIDEO_FILE_H264_2MP $VIDEO_FILE_H264_2MP$1
   echo "multifilesrc location=$VIDEO_FILE_H264_2MP$1"
   echo "stop-index=$LOOP_COUNT"
-  echo "caps=\"video/x-h264, width=1920, height=1080\" !"
+  echo "caps=\"video/x-h264, width=1920, height=1088\" !"
   echo "h264parse ! ${H264_DECODE[$DEC_TARGET]} $DMABUF_IMPORT !"
   echo "video/x-raw,format=NV12"
   DEC_TARGET=$((($DEC_TARGET + 1) % $NUM_DEC))
@@ -130,12 +130,12 @@ IMX390()
 
   IMX390_SRC="v4l2src device=$IMX390_DEV io-mode=5 num-buffers=$NUM_BUFFERS"
   IMX390_FMT="video/x-bayer, width=1936, height=1100, format=rggb12"
-  IMX390_ISP_COMMON_PROPS="dcc-isp-file=/opt/imaging/imx390/dcc_viss.bin \
+  IMX390_ISP_COMMON_PROPS="dcc-isp-file=/opt/imaging/imx390/linear/dcc_viss.bin \
                            format-msb=11 \
                            sensor-name=SENSOR_SONY_IMX390_UB953_D3 \
-                           sink_0::dcc-2a-file=/opt/imaging/imx390/dcc_2a.bin"
+                           sink_0::dcc-2a-file=/opt/imaging/linear/imx390/dcc_2a.bin"
   IMX390_ISP="tiovxisp target=$VISS_TARGET $IMX390_ISP_COMMON_PROPS sink_0::device=$IMX390_SUBDEV"
-  IMX390_LDC_COMMON_PROPS="sensor-name=SENSOR_SONY_IMX390_UB953_D3 dcc-file=/opt/imaging/imx390/dcc_ldc.bin"
+  IMX390_LDC_COMMON_PROPS="sensor-name=SENSOR_SONY_IMX390_UB953_D3 dcc-file=/opt/imaging/imx390/linear/dcc_ldc.bin"
   IMX390_LDC="tiovxldc target=$VISS_TARGET $IMX390_LDC_COMMON_PROPS ! video/x-raw,format=NV12,width=1920,height=1080"
   echo "$IMX390_SRC ! queue ! $IMX390_FMT ! $IMX390_ISP ! video/x-raw,format=NV12 ! $IMX390_LDC"
   VISS_TARGET=$((($VISS_TARGET + 1) % $NUM_VISS))
@@ -170,9 +170,9 @@ IMX219()
 
   IMX219_SRC="v4l2src device=$IMX219_DEV io-mode=5 num-buffers=$NUM_BUFFERS"
   IMX219_FMT="video/x-bayer, width=1920, height=1080, format=rggb"
-  IMX219_ISP_COMMON_PROPS="dcc-isp-file=/opt/imaging/imx219/dcc_viss.bin \
+  IMX219_ISP_COMMON_PROPS="dcc-isp-file=/opt/imaging/imx219/linear/dcc_viss.bin \
                            format-msb=7 \
-                           sink_0::dcc-2a-file=/opt/imaging/imx219/dcc_2a.bin"
+                           sink_0::dcc-2a-file=/opt/imaging/imx219/linear/dcc_2a.bin"
   IMX219_ISP="tiovxisp target=$VISS_TARGET $IMX219_ISP_COMMON_PROPS sink_0::device=$IMX219_SUBDEV"
   echo "$IMX219_SRC ! queue ! $IMX219_FMT ! $IMX219_ISP"
   VISS_TARGET=$((($VISS_TARGET + 1) % $NUM_VISS))
@@ -202,7 +202,7 @@ if [ "$SOC" == "j784s4" ]
 then
   NUM_C7X=4
 else
-  NUM_C7X=2
+  NUM_C7X=1
 fi
 
 C7X=0

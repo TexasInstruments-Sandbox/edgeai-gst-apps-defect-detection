@@ -32,14 +32,62 @@ import os
 import numpy as np
 import utils
 import sys
+import time
+import math
 from pathlib import Path
 abspath = Path(__file__).parent.absolute()
-sys.path.insert(0,os.path.join(abspath,'../../apps_python'))
-from gst_element_map import gst_element_map
+sys.path.insert(0,os.path.join(abspath,'../apps_python'))
+from gst_element_map import gst_element_map, SOC
+import gi
 
+gi.require_version("Gst", "1.0")
+gi.require_version("GstApp", "1.0")
+from gi.repository import Gst
+
+Gst.init(None)
+
+tidl_target_idx = 0
 preproc_target_idx = 0
 isp_target_idx = 0
 ldc_target_idx = 0
+msc_target_idx = 0
+
+class GstPipe:
+    """
+    Class to handle gstreamer pipeline related things
+    to gst pipeline
+    """
+
+    def __init__(self, pipeline):
+        """
+        Create a gst pipeline using gst launch string
+        Args:
+            pipeline: Gstreamer pipeline string
+        """
+        self.pipeline = Gst.parse_launch(pipeline)
+
+    def run(self):
+        """
+        Run the gst pipeline
+        """
+        bus = self.pipeline.get_bus()
+        ret = self.pipeline.set_state(Gst.State.PLAYING)
+        if ret == Gst.StateChangeReturn.FAILURE:
+            msg = self.bus.timed_pop_filtered(Gst.CLOCK_TIME_NONE, Gst.MessageType.ERROR)
+            err, debug_info = msg.parse_error()
+            print("[ERROR]", err.message)
+            sys.exit(1)
+        try:
+            while True:
+                if bus.have_pending():
+                    message = bus.pop()
+                    if message.type == Gst.MessageType.EOS or message.type == Gst.MessageType.ERROR:
+                        break
+                time.sleep(0.01)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.pipeline.set_state(Gst.State.NULL)
 
 def get_input_str(input):
     """
@@ -71,7 +119,7 @@ def get_input_str(input):
                 video_dec["h264"] += " capture-io-mode=%s" % \
                        gst_element_map["h264dec"]["property"]["capture-io-mode"]
 
-        video_dec["h264"] += " ! tiovxmemalloc pool-size=8" + \
+        video_dec["h264"] += " ! tiovxmemalloc pool-size=12" + \
                              " ! video/x-raw, format=NV12"
     else:
         video_dec["h264"] += " ! " + gst_element_map["h264dec"]["element"]
@@ -82,7 +130,7 @@ def get_input_str(input):
             if "capture-io-mode" in gst_element_map["h265dec"]["property"]:
                 video_dec["h265"] += " capture-io-mode=%s" % \
                        gst_element_map["h265dec"]["property"]["capture-io-mode"]
-        video_dec["h265"] += " ! tiovxmemalloc pool-size=8" + \
+        video_dec["h265"] += " ! tiovxmemalloc pool-size=12" + \
                              " ! video/x-raw, format=NV12"
     else:
         video_dec["h265"] += " ! " + gst_element_map["h265dec"]["element"]
@@ -162,17 +210,15 @@ def get_input_str(input):
                 sen_name = "SENSOR_OV2312_UB953_LI"
                 format_msb = 9
            
-            #TODO - Take sensor name and subdev as params
             source_cmd += ' tiovxisp sensor-name=%s' % sen_name + \
-                          ' dcc-isp-file=/opt/imaging/%s/dcc_viss.bin'% \
+                          ' dcc-isp-file=/opt/imaging/%s/linear/dcc_viss.bin'% \
                             input.sen_id + \
                           ' format-msb=%d' % \
                             format_msb + \
-                          ' sink_0::dcc-2a-file=/opt/imaging/%s/dcc_2a.bin' % \
+                          ' sink_0::dcc-2a-file=/opt/imaging/%s/linear/dcc_2a.bin' % \
                             input.sen_id
             if (input.format.startswith('rggb')):
-                source_cmd += ' sink_0::device=/dev/v4l-subdev%d' % \
-                              input.subdev_id
+                source_cmd += ' sink_0::device=%s' % input.subdev_id
             
             global isp_target_idx
             if "property" in gst_element_map["isp"]:
@@ -187,7 +233,7 @@ def get_input_str(input):
 
             if input.ldc:
                 source_cmd += ' tiovxldc' + \
-                              ' dcc-file=/opt/imaging/%s/dcc_ldc.bin' % \
+                              ' dcc-file=/opt/imaging/%s/linear/dcc_ldc.bin' % \
                                 input.sen_id + \
                               ' sensor-name=%s' % sen_name
 
@@ -234,7 +280,7 @@ def get_input_str(input):
 
     elif (source == 'raw_video'):
         source_cmd = 'multifilesrc location=' + input.source
-        source_cmd += ' loop=true stop-index=0' if input.loop else ''
+        source_cmd += ' loop=true stop-index=-1' if input.loop else ' loop=false stop-index=0'
 
         # Set caps only in case of hardware decoder
         if ((input.format == "h264" and gst_element_map["h264dec"]["element"] == "v4l2h264dec") or
@@ -261,17 +307,48 @@ def get_input_str(input):
                           ' ! video/x-raw, format=NV12 ! '
     return source_cmd
 
-def get_input_split_str(input):
+def get_input_split_str(input,flow):
+
+    global msc_target_idx
+
     if gst_element_map["scaler"]["element"] == "tiovxmultiscaler":
+        crop_startx = (((flow.model.resize[0] - flow.model.crop[0])/2)/flow.model.resize[0]) * flow.input.width
+        crop_startx = int(crop_startx)
+        crop_starty = (((flow.model.resize[1] - flow.model.crop[1])/2)/flow.model.resize[1]) * flow.input.height
+        crop_starty = int(crop_starty)
+        crop_width = flow.input.width - (2*crop_startx)
+        crop_height = flow.input.height - (2*crop_starty)
+        if ((input.splits - 1) // 2) % 2 == 0:
+            src_pad = 0
+        else:
+            src_pad = 2
+        if input.splits % 2 == 0:
+            input.roi_string += " src_%d::roi-startx=%d" % (src_pad,crop_startx)
+            input.roi_string += " src_%d::roi-starty=%d" % (src_pad,crop_starty)
+            input.roi_string += " src_%d::roi-width=%d" % (src_pad,crop_width)
+            input.roi_string += " src_%d::roi-height=%d" % (src_pad,crop_height)
+
+        # Load-balancing the msc targets
+        if input.msc_target_string == '':
+            if "property" in gst_element_map["scaler"]:
+                if "target" in gst_element_map["scaler"]["property"]:
+                    target = gst_element_map["scaler"]["property"]["target"][msc_target_idx]
+                    msc_target_idx += 1
+                    if msc_target_idx >= len(gst_element_map["scaler"]["property"]["target"]):
+                        msc_target_idx = 0
+                    input.msc_target_string = 'target=%d' % target
+
         if input.split_count == 1:
-            source_cmd = 'tiovxmultiscaler name=split_%d%d \\\n' % \
-                                                    (input.id, input.split_count)
+            source_cmd = 'tiovxmultiscaler name=split_%d%d ' % \
+                                                   (input.id, input.split_count)
+            source_cmd += input.msc_target_string + ' \\\n'
         else:
             source_cmd = 'tee name=tee_split%d \\\n' % input.id
             for i in range(input.split_count):
                 source_cmd += \
-                    'tee_split%d. ! queue ! tiovxmultiscaler name=split_%d%d \\\n' % \
-                                                        (input.id, input.id, i+1)
+                    'tee_split%d. ! queue ! tiovxmultiscaler name=split_%d%d ' % \
+                                                       (input.id, input.id, i+1)
+                source_cmd += input.msc_target_string + ' \\\n'
     else:
         source_cmd = 'tee name=tee_split%d \\\n' % input.id
 
@@ -283,10 +360,9 @@ def get_output_str(output):
     Args:
         output: output configuration
     """
-    image_enc = {'.jpg':' jpegenc ! '}
-    video_enc = {'.mov':' v4l2h264enc bitrate=10000000 ! h264parse ! qtmux ! ', \
-                 '.mp4':' v4l2h264enc bitrate=10000000 ! h264parse ! mp4mux ! ', \
-                 '.mkv':' v4l2h264enc bitrate=10000000 ! h264parse ! matroskamux ! '}
+    video_enc = {'.mov':' ! h264parse ! qtmux ! ', \
+                 '.mp4':' ! h264parse ! mp4mux ! ', \
+                 '.mkv':' ! h264parse ! matroskamux ! '}
 
     sink_ext = os.path.splitext(output.sink)[1]
     status = 0
@@ -298,7 +374,7 @@ def get_output_str(output):
                                     not os.path.dirname(output.sink)):
         if (sink_ext in video_enc):
             sink = 'video'
-        elif (sink_ext in image_enc):
+        elif (sink_ext == ".jpg"):
             sink = 'image'
         else:
             sink = 'others'
@@ -306,24 +382,82 @@ def get_output_str(output):
         sink = 'others'
 
     if (sink == 'display'):
-        sink_cmd = ' queue ! tiperfoverlay ! kmssink sync=false driver-name=tidss force-modesetting=true'
+        sink_cmd = ''
+        if output.overlay_perf_type != None:
+            sink_cmd += ' queue ! tiperfoverlay overlay-type=%s !' % output.overlay_perf_type
+        sink_cmd += ' kmssink driver-name=tidss sync=false'
+        #HACK - without this some models in am62a results in display flicker
+        if (SOC == "am62a"):
+            sink_cmd += ' force-modesetting=true'
         if (output.connector):
                 sink_cmd += ' connector-id=%d' % output.connector
     elif (sink == 'image'):
-        sink_cmd = image_enc[sink_ext] + \
+        sink_cmd = ' ' + gst_element_map["jpegenc"]["element"] + ' !' + \
                                     ' multifilesink location=' + output.sink
     elif (sink == 'video'):
-        sink_cmd = ' queue ! tiperfoverlay !' + video_enc[sink_ext] + 'filesink location=' + output.sink
+        sink_cmd = ''
+        if output.overlay_perf_type != None:
+            sink_cmd += ' queue ! tiperfoverlay overlay-type=%s !' % output.overlay_perf_type
+
+        sink_cmd += ' ' + gst_element_map["h264enc"]["element"]
+
+        if (gst_element_map["h264enc"]["element"] == "v4l2h264enc"):
+            prop_str = "video_bitrate=%d, video_gop_size=%d" \
+                                              % (output.bitrate,output.gop_size)
+            enc_extra_ctrl = "extra-controls=\"controls, " + \
+                            "frame_level_rate_control_enable=1, " + \
+                            prop_str + \
+                            "\""
+            sink_cmd += ' ' + enc_extra_ctrl
+
+        sink_cmd += video_enc[sink_ext] + 'filesink location=' + output.sink
 
     elif (sink == 'remote'):
-        sink_cmd = ' queue ! tiperfoverlay ! v4l2h264enc gop-size=30 bitrate=10000000 ! h264parse ! rtph264pay ! udpsink host=%s port=%d sync=false' % (output.host,output.port)
+        sink_cmd = ''
+        if output.overlay_perf_type != None:
+            sink_cmd += ' queue ! tiperfoverlay overlay-type=%s !' % output.overlay_perf_type
+
+        if output.encoding == "mp4" or output.encoding == "h264":
+
+            sink_cmd += ' ' + gst_element_map["h264enc"]["element"]
+
+            if (gst_element_map["h264enc"]["element"] == "v4l2h264enc"):
+                prop_str = "video_bitrate=%d, video_gop_size=%d" \
+                                              % (output.bitrate,output.gop_size)
+                enc_extra_ctrl = "extra-controls=\"controls, " + \
+                                "frame_level_rate_control_enable=1, " + \
+                                prop_str + \
+                                "\""
+                sink_cmd +=  ' ' + enc_extra_ctrl
+
+            sink_cmd += ' ! h264parse !'
+
+            if output.encoding == "mp4":
+                sink_cmd += ' mp4mux fragment-duration=1 !'
+            elif output.encoding == "h264":
+                sink_cmd += ' rtph264pay !'
+
+        elif output.encoding == "jpeg":
+            sink_cmd += ' ' + gst_element_map["jpegenc"]["element"] + ' ! multipartmux boundary=spionisto ! rndbuffersize max=65000 !'
+
+        else:
+            print("[ERROR] Wrong encoding [%s] defined for remote output.", output.encoding)
+            sys.exit()
+
+        sink_cmd += ' udpsink host=%s port=%d sync=false' % (output.host,output.port)
 
     elif (sink == 'others'):
-        sink_cmd = ' queue ! tiperfoverlay ! ' + output.sink
+        sink_cmd = ''
+        if output.overlay_perf_type != None:
+            sink_cmd += ' queue ! tiperfoverlay overlay-type=%s !' % output.overlay_perf_type
+        sink_cmd += ' ' + output.sink
 
     if (output.mosaic):
         sink_cmd = '! video/x-raw,format=NV12, width=%d, height=%d ' % (output.width,output.height) + '!' + sink_cmd
-        mosaic_cmd = 'tiovxmosaic target=1 src::pool-size=3 name=mosaic_%d' % (output.id) + ' \\\n'
+        mosaic_cmd = gst_element_map["mosaic"]["element"] + ' name=mosaic_%d' % (output.id)
+        if gst_element_map["mosaic"]["element"] == "tiovxmosaic":
+            mosaic_cmd += ' target=1 src::pool-size=4'
+        mosaic_cmd += ' \\\n'
     else:
         mosaic_cmd = ''
 
@@ -335,108 +469,123 @@ def get_pre_proc_str(flow):
     Args:
         flow: flow configuration
     """
-    global preproc_target_idx
+    global preproc_target_idx, tidl_target_idx
     cmd = ''
 
-    if (flow.model.task_type == 'classification'):
-        resize = flow.model.resize[0]
-        cam_dims = (flow.input.width, flow.input.height)
-        #tiovxmultiscaler dosen't support odd resolutions
-        if (gst_element_map["scaler"]["element"] == "tiovxmultiscaler"):
-            resize = (((cam_dims[0]*resize//min(cam_dims)) >> 1) << 1, \
-                      ((cam_dims[1]*resize//min(cam_dims)) >> 1) << 1)
-    else:
-        resize = flow.model.resize
+    resize = flow.model.resize
+    crop = flow.model.crop
+
+    crop_startx = (((resize[0] - crop[0])/2)/resize[0]) * flow.input.width
+    crop_startx = int(crop_startx)
+    crop_starty = (((resize[1] - crop[1])/2)/resize[1]) * flow.input.height
+    crop_starty = int(crop_starty)
+    crop_width = flow.input.width - (2*crop_startx)
+    crop_height = flow.input.height - (2*crop_starty)
+
 
     if (gst_element_map["scaler"]["element"] == "tiovxmultiscaler"):
         #tiovxmultiscaler dose not support upscaling and downscaling with scaling
         #factor < 1/4, So use "videoscale" insted
-        if (float(flow.input.width)/resize[0] > 4 or \
-                                            float(flow.input.height)/resize[1] > 4):
-            width = (flow.input.width + resize[0]) // 2
-            height = (flow.input.height + resize[1]) // 2
+        if (float(crop_width)/crop[0] > 4 or \
+                                            float(crop_height)/crop[0] > 4):
+            width = max(crop[0], math.ceil(crop_width / 4))
+            height = max(crop[1], math.ceil(crop_height / 4))
             if width % 2 != 0:
                 width += 1
             if height % 2 != 0:
                 height += 1     
-            cmd += 'video/x-raw, width=%d, height=%d ! tiovxmultiscaler target=1 ! ' % \
-                                                                    (width,height)
-        
-    
-        elif (flow.input.width/resize[0] < 1 or flow.input.height/resize[1] < 1):
-            cmd += 'video/x-raw, width=%d, height=%d ! videoscale ! ' % \
-                                        (flow.input.width, flow.input.height)
+            cmd += 'video/x-raw, width=%d, height=%d ! tiovxmultiscaler ! ' % \
+                                                                  (width,height)
 
-        cmd += 'video/x-raw, width=%d, height=%d ! ' % tuple(resize)
+        elif (crop_width/crop[0] < 1 or crop_height/crop[1] < 1):
+            cmd += 'video/x-raw, width=%d, height=%d ! videoscale ! ' % \
+                                                       (crop_width, crop_height)
+
+        cmd += 'video/x-raw, width=%d, height=%d ! ' % tuple(crop)
     
+    elif (gst_element_map["scaler"]["element"] == "tiscaler"):
+        roi_string = ' roi-startx=%d roi-starty=%d roi-width=%d roi-height=%d' % \
+                                (crop_startx,crop_starty,crop_width,crop_height)
+
+        cmd += gst_element_map["scaler"]["element"] + '%s ! ' % roi_string
+        cmd += 'video/x-raw, width=%d, height=%d ! ' % tuple(crop)
+
     else:
         cmd += gst_element_map["scaler"]["element"] + \
                ' ! video/x-raw, width=%d, height=%d ! ' % tuple(resize)
-    
-    if (flow.model.task_type == 'classification'):
-        cmd += gst_element_map["dlcolorconvert"]["element"]
-        if "property" in gst_element_map["dlcolorconvert"]:
-            if "out-pool-size" in gst_element_map["dlcolorconvert"]["property"]:
-                cmd += ' out-pool-size=%d' % gst_element_map["dlcolorconvert"]["property"]["out-pool-size"]
-        
-        cmd += ' ! video/x-raw, format=RGB ! '
-        
-        left = (resize[0] - flow.model.crop[0])//2
-        right = resize[0] - flow.model.crop[0] - left
-        top = (resize[1] - flow.model.crop[1])//2
-        bottom = resize[1] - flow.model.crop[1] - top
-        cmd += 'videobox left=%d right=%d top=%d bottom=%d ! ' % \
-                                                      (left, right, top, bottom)
 
-    layout = 0 if flow.model.data_layout == "NCHW"  else 1
-    tensor_fmt = "bgr" if (flow.model.reverse_channels) else "rgb"
+        if (flow.model.task_type == 'classification'):
+            cmd += gst_element_map["dlcolorconvert"]["element"]
+            if "property" in gst_element_map["dlcolorconvert"]:
+                if "out-pool-size" in gst_element_map["dlcolorconvert"]["property"]:
+                    cmd += ' out-pool-size=%d' % gst_element_map["dlcolorconvert"]["property"]["out-pool-size"]
 
-    if   (flow.model.data_type == np.int8):
-        data_type = 2
-    elif (flow.model.data_type == np.uint8):
-        data_type = 3
-    elif (flow.model.data_type == np.int16):
-        data_type = 4
-    elif (flow.model.data_type == np.uint16):
-        data_type = 5
-    elif (flow.model.data_type == np.int32):
-        data_type = 6
-    elif (flow.model.data_type == np.uint32):
-        data_type = 7
-    elif (flow.model.data_type == np.float32):
-        data_type = 10
-    else:
-        print("[ERROR] Unsupported data type for input tensor")
-        sys.exit(1)
+            cmd += ' ! video/x-raw, format=RGB ! '
 
-    cmd += 'tiovxdlpreproc data-type=%d ' % data_type + \
-           'channel-order=%d ' % layout
+            left = (resize[0] - flow.model.crop[0])//2
+            right = resize[0] - flow.model.crop[0] - left
+            top = (resize[1] - flow.model.crop[1])//2
+            bottom = resize[1] - flow.model.crop[1] - top
+            cmd += 'videobox left=%d right=%d top=%d bottom=%d ! ' % \
+                                                        (left, right, top, bottom)
+
+    if not gst_element_map["dlpreproc"]:
+        print("[ERROR] Need dlpreproc element for end-to-end pipeline")
+        sys.exit()
+
+    cmd += gst_element_map["dlpreproc"]["element"] + ' model=%s ' % flow.model.path
 
     target = None
-    if "target" in gst_element_map["dlpreproc"]["property"]:
-        target = gst_element_map["dlpreproc"]["property"]["target"][preproc_target_idx]
-        preproc_target_idx += 1
-        if preproc_target_idx >= len(gst_element_map["dlpreproc"]["property"]["target"]):
-            preproc_target_idx = 0
+    if "property" in gst_element_map["dlpreproc"]:
+        if "target" in gst_element_map["dlpreproc"]["property"]:
+            target = gst_element_map["dlpreproc"]["property"]["target"][preproc_target_idx]
+            preproc_target_idx += 1
+            if preproc_target_idx >= len(gst_element_map["dlpreproc"]["property"]["target"]):
+                preproc_target_idx = 0
+            cmd += 'target=%d ' % target
 
-    if target != None:
-        cmd += 'target=%d ' % target
+        if "out-pool-size" in gst_element_map["dlpreproc"]["property"]:
+            cmd += ' out-pool-size=%d ' % gst_element_map["dlpreproc"]["property"]["out-pool-size"]
 
-    if (flow.model.mean):
-        cmd += 'mean-0=%f mean-1=%f mean-2=%f ' % tuple(flow.model.mean)
+    cmd += '! application/x-tensor-tiovx ! '
 
-    if (flow.model.scale):
-        cmd += 'scale-0=%f scale-1=%f scale-2=%f ' % tuple(flow.model.scale)
+    split_name = flow.input.get_split_name(flow)
 
-    cmd += 'tensor-format=%s ' % tensor_fmt + \
-           'out-pool-size=4 ! application/x-tensor-tiovx ! '
-
-    split_name = flow.input.get_split_name()
     if (gst_element_map["scaler"]["element"] != "tiovxmultiscaler"):
         split_name = "tee_split%d" % (flow.input.id)
 
+    '''
+        set secondary msc target if present
+        secondary multiscaler target will always be complimentary of primary.
+        For ex: msc_targets=[0,1,2,3]
+            If primary msc target is 0, secondary will be 1
+            If primary msc target is 1, secondary will be 2
+            ..and so on
+    '''
+    if 'tiovxmultiscaler' in cmd:
+        input_target = None
+        for i in flow.input.gst_split_str.split("!"):
+            if 'tiovxmultiscaler' in i:
+                for j in i.split(" "):
+                    if 'target' in j:
+                        input_target = int(j.split("=")[-1].strip())
+        if (input_target != None):
+            msc_targets = gst_element_map["scaler"]["property"]["target"]
+            target_idx = len(msc_targets) - msc_targets.index(input_target) - 1
+            replacement_string = 'tiovxmultiscaler target=%d' % msc_targets[target_idx]
+            cmd = cmd.replace('tiovxmultiscaler' , replacement_string )
+
+    # Set dl_inferer core number
+    target_str = ''
+    if "core-id" in gst_element_map["inferer"]:
+        target = gst_element_map["inferer"]["core-id"][tidl_target_idx]
+        tidl_target_idx += 1
+        if tidl_target_idx >= len(gst_element_map["inferer"]["core-id"]):
+            tidl_target_idx = 0
+        target_str = 'target=%d ' % target
+
     cmd =   split_name + '. ! queue ! ' + cmd + \
-            'tidlinferer target=%s model=%s ! %s.tensor ' % (flow.model.core_number, flow.model.path, flow.gst_post_name)
+            'tidlinferer %s model=%s ! %s.tensor ' % (target_str, flow.model.path, flow.gst_post_name)
 
     return cmd
 
@@ -446,7 +595,7 @@ def get_sensor_str(flow):
     Args:
         flow: flow configuration
     """
-    split_name = flow.input.get_split_name()
+    split_name = flow.input.get_split_name(flow)
     if (gst_element_map["scaler"]["element"] != "tiovxmultiscaler"):
         split_name = "tee_split%d" % (flow.input.id)
 
@@ -454,11 +603,11 @@ def get_sensor_str(flow):
     if (gst_element_map["scaler"]["element"] == "tiovxmultiscaler"):
         cmd = split_name + '. ! queue ! ' + cmd
     else:
-        cmd = split_name + '. ! ' + gst_element_map["scaler"]["element"] + ' ! queue ! ' + cmd
+        cmd = split_name + '. ! queue ! ' + gst_element_map["scaler"]["element"] + ' ! ' + cmd
     return cmd
 
 def get_post_proc_str(flow):
-    cmd = 'tidlpostproc name=%s model=%s alpha=%f viz-threshold=%f top-N=%d ! ' % \
+    cmd = 'tidlpostproc name=%s model=%s alpha=%f viz-threshold=%f top-N=%d display-model=true ! ' % \
           (flow.gst_post_name, flow.model.path, flow.model.alpha, flow.model.viz_threshold, flow.model.topN)
 
     if (flow.output.mosaic):
@@ -481,6 +630,14 @@ def get_gst_str(flows, outputs):
         if (f.input.input_format != "NV12"):
             src_str += gst_element_map["dlcolorconvert"]["element"] + \
                        " ! video/x-raw,format=NV12 ! "
+
+        if len(f.input.roi_strings) != f.input.split_count:
+            f.input.roi_strings.append(f.input.roi_string)
+        for i,roi_str in enumerate(f.input.roi_strings):
+            actual_string = "tiovxmultiscaler name=split_%d%d" %  (f.input.id,(i+1))
+            replacement_string = actual_string + roi_str
+            f.input.gst_split_str = f.input.gst_split_str.replace(actual_string,replacement_string)
+
         mosaic = True
         for s in f.sub_flows:
             if not s.output.mosaic:
@@ -498,7 +655,7 @@ def get_gst_str(flows, outputs):
                 #Increase Post Proce Sink Pool size
                 pass
 
-        src_str += '\\\n' + f.input.gst_split_str
+        src_str += '\\\n' + f.input.gst_split_str + '\\\n'
 
         for s in f.sub_flows:
             src_str += s.gst_pre_proc_str + '\\\n'

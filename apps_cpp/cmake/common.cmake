@@ -28,9 +28,12 @@ message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE} PROJECT_NAME = ${PROJECT_
 SET(CMAKE_FIND_LIBRARY_PREFIXES "" "lib")
 SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".lib" ".so")
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/${CMAKE_BUILD_TYPE})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE})
+if(NOT CMAKE_OUTPUT_DIR)
+    set(CMAKE_OUTPUT_DIR ${CMAKE_SOURCE_DIR})
+endif()
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIR}/lib/${CMAKE_BUILD_TYPE})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIR}/lib/${CMAKE_BUILD_TYPE})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIR}/bin/${CMAKE_BUILD_TYPE})
 
 if (NOT DEFINED ENV{SOC})
     message(FATAL_ERROR "SOC not defined.")
@@ -58,11 +61,11 @@ elseif ("${TARGET_SOC_LOWER}" STREQUAL "am62a")
     set(TARGET_CPU          A53)
     set(TARGET_OS           LINUX)
     set(TARGET_SOC          AM62A)
-elseif ("${TARGET_SOC_LOWER}" STREQUAL "am62")
+elseif ("${TARGET_SOC_LOWER}" STREQUAL "am62x")
     set(TARGET_PLATFORM     SITARA)
     set(TARGET_CPU          A53)
     set(TARGET_OS           LINUX)
-    set(TARGET_SOC          AM62)
+    set(TARGET_SOC          AM62X)
 else()
     message(FATAL_ERROR "SOC ${TARGET_SOC_LOWER} is not supported.")
 endif()
@@ -78,7 +81,6 @@ add_definitions(
 
 set(TENSORFLOW_INSTALL_DIR ${TARGET_FS}/usr/include/tensorflow)
 set(ONNXRT_INSTALL_DIR ${TARGET_FS}/usr/include/onnxruntime)
-set(DLPACK_INSTALL_DIR ${TARGET_FS}/usr/include/dlpack)
 set(TFLITE_INSTALL_DIR ${TARGET_FS}/usr/lib/tflite_2.8)
 
 if(USE_DLR_RT)
@@ -98,7 +100,7 @@ link_directories(${TARGET_FS}/usr/lib/aarch64-linux-gnu
                  )
 
 if(USE_DLR_RT)
-link_directories(${TARGET_FS}/usr/lib/python3.8/site-packages/dlr)
+link_directories(${TARGET_FS}/usr/lib/python3.10/site-packages/dlr)
 endif()
 
 if(USE_TENSORFLOW_RT)
@@ -125,15 +127,16 @@ include_directories(${PROJECT_SOURCE_DIR}
                     SYSTEM ${TARGET_FS}/usr/local/include
                     SYSTEM ${TARGET_FS}/usr/include/gstreamer-1.0
                     SYSTEM ${TARGET_FS}/usr/include/glib-2.0
+                    SYSTEM ${TARGET_FS}/usr/lib/glib-2.0/include
                     SYSTEM ${TARGET_FS}/usr/lib/aarch64-linux-gnu/glib-2.0/include
                     SYSTEM ${TARGET_FS}/usr/include/opencv4/
                     SYSTEM ${TARGET_FS}/usr/include/processor_sdk/vision_apps
+                    SYSTEM ${TARGET_FS}/usr/include/processor_sdk/app_utils
                     SYSTEM ${TARGET_FS}/usr/include/edgeai_dl_inferer
-                    SYSTEM ${DLPACK_INSTALL_DIR}/include
                     )
 
 if(USE_DLR_RT)
-include_directories(${TARGET_FS}/usr/lib/python3.8/site-packages/dlr/include/)
+include_directories(${TARGET_FS}/usr/lib/python3.10/site-packages/dlr/include/)
 endif()
 
 if(USE_TENSORFLOW_RT)
@@ -170,7 +173,7 @@ set(SYSTEM_LINK_LIBS
     dl
     )
 
-if(NOT ${TARGET_SOC} STREQUAL "AM62")
+if(NOT ${TARGET_SOC} STREQUAL "AM62X")
 set(SYSTEM_LINK_LIBS ${SYSTEM_LINK_LIBS} tivision_apps)
 endif()
 

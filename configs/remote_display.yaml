@@ -1,49 +1,60 @@
 title: "Remote Display"
 # If output is set to display, it runs the pipeline with udpsink as the output
-# To view the output on web browser, run the streamlit server using
-# root@soc:/opt/edgeai-gst-apps> streamlit run scripts/udp_vis.py -- --port *port_number* [Default is 8081]
-# This will start streamlit webserver and generate a link which you can open in browser
+# To view the output on web browser, run the node server
+# root@soc:/opt/edgeai-gst-apps> node scripts/remote_streaming/server.js
+# This will start node webserver and generate a link which you can open in browser
 log_level: 2
 inputs:
     input0:
-        source: /dev/video2
+        source: /dev/video-usb-cam0
         format: jpeg
         width: 1280
         height: 720
         framerate: 30
     input1:
-        source: /opt/edgeai-test-data/videos/video_0000_h264.h264
+        source: /opt/edgeai-test-data/videos/video0_1280_768.h264
         format: h264
-        width: 640
-        height: 480
+        width: 1280
+        height: 768
         framerate: 30
         loop: True
     input2:
         source: /opt/edgeai-test-data/images/%04d.jpg
-        width: 640
-        height: 480
+        width: 1280
+        height: 720
         index: 0
         framerate: 1
         loop: True
 models:
     model0:
-        model_path: /opt/model_zoo/ONR-SS-8610-deeplabv3lite-mobv2-ade20k32-512x512
-        alpha: 0.4
-    model1:
-        model_path: /opt/model_zoo/TFL-OD-2010-ssd-mobV2-coco-mlperf-300x300
-        viz_threshold: 0.6
-    model2:
         model_path: /opt/model_zoo/TFL-CL-0000-mobileNetV1-mlperf
         topN: 5
-
+    model1:
+        model_path: /opt/model_zoo/ONR-OD-8200-yolox-nano-lite-mmdet-coco-416x416
+        viz_threshold: 0.6
+    model2:
+        model_path: /opt/model_zoo/ONR-SS-8610-deeplabv3lite-mobv2-ade20k32-512x512
+        alpha: 0.4
 outputs:
+    # Jpeg encode and stream
     output0:
         sink: remote
         width: 1280
         height: 720
         port: 8081
-        host: 0.0.0.0
-        overlay-performance: True
+        host: 127.0.0.1
+        encoding: jpeg
+        overlay-perf-type: graph
+    # mp4 encode and stream
+    output1:
+        sink: remote
+        width: 1280
+        height: 720
+        port: 8081
+        host: 127.0.0.1
+        encoding: mp4
+        bitrate: 1000000
+        overlay-perf-type: graph
 
 flows:
-    flow0: [input0,model1,output0]
+    flow0: [input1,model1,output0]

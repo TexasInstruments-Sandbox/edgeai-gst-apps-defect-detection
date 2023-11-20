@@ -50,7 +50,7 @@ class Input:
         if "subdev-id" in input_config:
             self.subdev_id = input_config["subdev-id"]
         else:
-            self.subdev_id = 2
+            self.subdev_id = "/dev/v4l-subdev2"
         if "ldc" in input_config:
             self.ldc = input_config["ldc"]
         else:
@@ -101,14 +101,10 @@ class Output:
             self.host = output_config["host"]
         else:
             self.host = "0.0.0.0"
-        if "payloader" in output_config:
-            self.payloader = output_config["payloader"]
+        if 'encoding' in output_config:
+            self.encoding = output_config['encoding']
         else:
-            self.payloader = "rtph264pay"
-        if "encoder" in output_config:
-            self.encoder = output_config["encoder"]
-        else:
-            self.encoder = "v4l2h264enc"
+            self.encoding = 'h264'
         if "gop-size" in output_config:
             self.gop_size = output_config["gop-size"]
         else:
@@ -117,10 +113,10 @@ class Output:
             self.bitrate = output_config["bitrate"]
         else:
             self.bitrate = 10000000
-        if "overlay-performance" in output_config:
-            self.overlay_performance = output_config["overlay-performance"]
+        if "overlay-perf-type" in output_config:
+            self.overlay_perf_type = output_config["overlay-perf-type"]
         else:
-            self.overlay_performance = False
+            self.overlay_perf_type = None
         self.mosaic = False
         self.id = Output.count
         self.gst_bkgnd_sink = None
@@ -146,7 +142,7 @@ class Output:
                 self.gst_mosaic_elements,
                 self.gst_disp_elements,
             ) = gst_wrapper.get_output_elements(self)
-            if self.overlay_performance:
+            if self.overlay_perf_type != None:
                 self.title_frame = create_title_frame(None, self.width, self.height)
             else:
                 self.title_frame = create_title_frame(self.title, self.width, self.height)

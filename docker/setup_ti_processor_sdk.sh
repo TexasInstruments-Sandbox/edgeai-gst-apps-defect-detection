@@ -45,7 +45,7 @@ ln -snf /host/usr/include/processor_sdk /usr/include/processor_sdk
 ln -snf /host/usr/lib/libIL.so.1 /usr/lib/libIL.so.1
 ln -snf /host/usr/lib/libILU.so.1 /usr/lib/libILU.so.1
 ln -snf /host/usr/lib/libtivision_apps.so /usr/lib/libtivision_apps.so
-ln -snf /host/usr/lib/libtivision_apps.so.8.5.0 /usr/lib/libtivision_apps.so.8.5.0
+ln -snf /host/usr/lib/libtivision_apps.so.9.0.0 /usr/lib/libtivision_apps.so.9.0.0
 ln -snf /host/usr/lib/libti_rpmsg_char.so.0 /usr/lib/libti_rpmsg_char.so.0
 
 # Softlink update required for v4l2h264enc
@@ -64,4 +64,4 @@ echo export LD_LIBRARY_PATH=/usr/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/edgeai-
 ldconfig
 
 # Disable Neo-DLR phone-home feature
-echo '{"enable_phone_home": false}' > /usr/local/lib/python3.8/dist-packages/dlr/counter/ccm_config.json
+echo '{"enable_phone_home": false}' > /usr/local/lib/python3.10/dist-packages/dlr/counter/ccm_config.json

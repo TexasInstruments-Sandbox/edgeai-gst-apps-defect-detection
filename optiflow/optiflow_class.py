@@ -36,8 +36,6 @@ from gst_element_map import gst_element_map
 
 class OptiFlowClass:
 
-    C7_CORE_ID_INDEX = 0
-
     def __init__(self, config):
         """
         Constructor of EdgeAIDemo class
@@ -80,20 +78,12 @@ class OptiFlowClass:
             if model not in self.models:
                 model_config =  config["models"][model]
                 model_path = model_config["model_path"]
-                # Make model Config. This class is present in edgeai_dl_inferer
-                enable_tidl = False
-                core_id = 1
-                if (gst_element_map['inferer']['target'] == 'dsp'):
-                    enable_tidl = True
-                    if 'core-id' in gst_element_map['inferer']:
-                        core_id = gst_element_map['inferer']['core-id'][OptiFlowClass.C7_CORE_ID_INDEX]
-                        OptiFlowClass.C7_CORE_ID_INDEX += 1
-                        if OptiFlowClass.C7_CORE_ID_INDEX >= len(gst_element_map['inferer']['core-id']):
-                            OptiFlowClass.C7_CORE_ID_INDEX = 0
-                elif (gst_element_map['inferer']['target'] != 'arm'):
-                    print("[WARNING] Invalid target specified for inferer. Defaulting to ARM.")
 
-                model_obj = ModelConfig(model_path,enable_tidl,core_id)
+                # Make model Config. This class is present in edgeai_dl_inferer
+                # Enable TIDL here doesnt matter since we are not going to
+                # use python runtime anyway. We will use tidlinferer plugin
+                model_obj = ModelConfig(model_path,False,1)
+
                 # task specific params
                 if "alpha" in model_config:
                     model_obj.alpha = model_config["alpha"]
@@ -165,7 +155,19 @@ class OptiFlowClass:
         if self.title:
             self.pipeline = self.pipeline.replace('tiperfoverlay',
                                                   'tiperfoverlay title="%s"' % self.title)
-
     def get_pipeline(self):
+        """
+        Member function to get the pipeline as str
+        """
         return self.pipeline
     
+    def run(self):
+        """
+        Member function to run the pipeline
+        """
+        pipeline = self.pipeline.replace("\\","")
+        pipeline = pipeline.replace("\n","")
+        self.gst_pipe = gst_wrapper.GstPipe(pipeline)
+        print(f"\n{self.pipeline}\n")
+        self.gst_pipe.run()
+

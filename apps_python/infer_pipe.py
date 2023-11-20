@@ -85,12 +85,6 @@ class InferPipe:
         """
         self.stop_thread = True
 
-    def wait_for_exit(self):
-        """
-        Waiting for exit, to be called by parent thread
-        """
-        self.pipeline_thread.join()
-
     def pipeline(self):
         """
         Callback function for pipeline thread
@@ -103,7 +97,7 @@ class InferPipe:
                 self.sub_flow.model.crop[0],
                 self.sub_flow.model.crop[1],
                 self.sub_flow.model.data_layout,
-                self.sub_flow.model.data_type,
+                self.sub_flow.model.input_tensor_types[0],
             )
             if type(input_img) == type(None):
                 break
@@ -129,5 +123,5 @@ class InferPipe:
             # Increment frame count
             self.sub_flow.report.report_frame()
 
-        self.stop_thread = False
+        self.stop_thread = True
         self.gst_pipe.send_eos(self.gst_post_out)

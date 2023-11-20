@@ -272,7 +272,7 @@ namespace ti::edgeai::common
             string                              m_pattern{"ball"};
 
             /** v4l subdev id of sensor. */
-            int32_t                             m_subdev_id{2};
+            string                              m_subdev_id{"/dev/v4l-subdev2"};
 
             /** Frame rate. */
             string                              m_framerate{};
@@ -447,10 +447,10 @@ namespace ti::edgeai::common
              */
             int32_t                         m_port{8081};
 
-            /** Payloader for remote sink.
+            /** Encoding type for remote sink.
              * This field is ignored for sinks other than remote
              */
-            string                          m_payloader{"rtph264pay"};
+            string                          m_encoding{"h264"};
 
             /** gop size for encoder.
              */
@@ -462,7 +462,7 @@ namespace ti::edgeai::common
 
             /** Use tiperfoverlay.
              */
-            bool                            m_overlayPerformance{false};
+            string                          m_overlayPerfType{""};
 
             /** Output buffer. */
             GstWrapperBuffer                m_outBuff;
@@ -565,6 +565,23 @@ namespace ti::edgeai::common
              */
             void dumpInfo(const char *prefix="") const;
 
+        private:
+            /**
+             * Copy Constructor.
+             *
+             * Copy Constructor is not required and allowed and hence prevent
+             * the compiler from generating a default Copy Constructor.
+             */
+            ModelInfo(const ModelInfo& ) = delete;
+
+            /**
+             * Assignment operator.
+             *
+             * Assignment is not required and allowed and hence prevent
+             * the compiler from generating a default assignment operator.
+             */
+            ModelInfo & operator=(const ModelInfo& rhs) = delete;
+
         public:
             /** Inference context. */
             DLInferer              *m_infererObj{nullptr};
@@ -635,6 +652,23 @@ namespace ti::edgeai::common
              * @param prefix Prefix to be added to the log outputs.
              */
             void dumpInfo(const char *prefix="") const;
+
+        private:
+            /**
+             * Copy Constructor.
+             *
+             * Copy Constructor is not required and allowed and hence prevent
+             * the compiler from generating a default Copy Constructor.
+             */
+            SubFlowInfo(const SubFlowInfo& ) = delete;
+
+            /**
+             * Assignment operator.
+             *
+             * Assignment is not required and allowed and hence prevent
+             * the compiler from generating a default assignment operator.
+             */
+            SubFlowInfo & operator=(const SubFlowInfo& rhs) = delete;
 
         public:
             /** Pre-processing context. */

@@ -30,43 +30,64 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-topdir=$EDGEAI_GST_APPS_PATH
-usb_camera=`ls /dev/v4l/by-path/*usb*video-index0 | head -1 | xargs readlink -f`
-usb_fmt=jpeg
-usb_width=1280
-usb_height=720
+current_dir=$(pwd)
+cd $(dirname $0)
 
-BRIGHTWHITE='\033[0;37;1m'
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NOCOLOR='\033[0m'
+branch_name=EDGEAI_APP_STACK_09_01_00_00
 
-####################################################################################################
-
-export TEST_ENGINE_DEBUG=1
-config_file="$topdir/tests/test_config.yaml"
-parse_script="$topdir/tests/parse_log_data.py"
-timeout=30
-filter=""
-measure_cpuload="false"
-
-####################################################################################################
-cleanup() {
-	echo
-	echo "[Ctrl-C] Killing the script..."
-}
-
-# TODO: The trap is not reliable currently, need to be fixed
-trap cleanup SIGINT
-
-# Setup the source and sink in the test config YAML file
-sed -i "s@source:.*@source: $usb_camera@" $config_file
-sed -i "s@format:.*@format: $usb_fmt@" $config_file
-sed -i "1,/width:.*/s//width: $usb_width/" $config_file
-sed -i "1,/height:.*/s//height: $usb_height/" $config_file
-sed -i "s@sink:.*@sink: kmssink@" $config_file
-
-for test_suite in "OPTIFLOW-PERF-USBCAM"; do
-	cd $(dirname $0)
-	./test_engine.sh "OPTIFLOW-PERF-USBCAM" $config_file $timeout $parse_script "$filter" $measure_cpuload
+if [ `arch` == "aarch64" ]; then
+    install_dir="/opt/"
+else
+    install_dir="../../"
+fi
+while getopts ":i:b:d" flag; do
+    case "${flag}" in
+        i)
+            if [ -z $OPTARG ] || [ ! -d $OPTARG ]; then
+                echo "Invalid installation directory "
+                cd $current_dir
+                exit 1
+            fi
+            install_dir="$OPTARG"
+            ;;
+        b)
+            branch_name="$OPTARG"
+            ;;
+        d)
+            build_flag="-DCMAKE_BUILD_TYPE=Debug"
+            ;;
+        *)
+            if [ $OPTARG == i ]; then
+                echo "Installation directory not provided"
+                cd $current_dir
+                exit 1
+            fi
+            ;;
+    esac
 done
+
+# Clone edgeai-apps-utils under /opt
+cd $install_dir
+ls | grep "edgeai-apps-utils"
+if [ "$?" -ne "0" ]; then
+    git clone --single-branch --branch $branch_name https://git.ti.com/cgit/edgeai/edgeai-apps-utils
+    if [ "$?" -ne "0" ]; then
+        cd $current_dir
+        exit 1
+    fi
+fi
+
+set -e
+
+# Install if running from target else skip
+if [ `arch` == "aarch64" ]; then
+    cd edgeai-apps-utils
+    rm -rf build
+    mkdir build
+    cd build
+    cmake $build_flag ..
+    make -j2
+    make install
+fi
+
+cd $current_dir

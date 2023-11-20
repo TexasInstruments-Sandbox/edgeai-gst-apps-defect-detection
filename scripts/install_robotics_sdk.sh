@@ -31,7 +31,15 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Release tag info of the current release
+<<<<<<< HEAD
+<<<<<<< HEAD
+GIT_TAG="REL.09.00.00"
+=======
 GIT_TAG="REL.08.06.01"
+>>>>>>> 44f4d44 (scripts: updated the tags)
+=======
+GIT_TAG="REL.08.06.01"
+>>>>>>> main
 if [ "$#" -eq 1 ]; then
     GIT_TAG=$1
 fi

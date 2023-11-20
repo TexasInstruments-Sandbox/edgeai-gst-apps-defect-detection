@@ -219,7 +219,9 @@ void *PostprocessImageObjDetect::operator()(void           *frameData,
     for (auto i = 0; i < numEntries; i++)
     {
         float score;
-        int label, box[4];
+        int label, adj_class_id, box[4];
+        std::string objectname;
+
         score = getVal(i, m_config.formatter[5]);
 
         if (score < m_config.vizThreshold)
@@ -234,8 +236,30 @@ void *PostprocessImageObjDetect::operator()(void           *frameData,
 
         label = getVal(i, m_config.formatter[4]);
 
-        int32_t adj_class_id = m_config.labelOffsetMap.at(label);
-        const std::string objectname = m_config.classnames.at(adj_class_id);
+        if (m_config.labelOffsetMap.find(label) != m_config.labelOffsetMap.end())
+        {
+            adj_class_id = m_config.labelOffsetMap.at(label);
+        }
+        else
+        {
+            adj_class_id = m_config.labelOffsetMap.at(0) + label;
+        }
+
+        if (m_config.datasetInfo.find(adj_class_id) != m_config.datasetInfo.end())
+        {
+            objectname = m_config.datasetInfo.at(adj_class_id).name;
+            if ("" != m_config.datasetInfo.at(adj_class_id).superCategory)
+            {
+                objectname = m_config.datasetInfo.at(adj_class_id).superCategory +
+                             "/" +
+                             objectname;
+            }
+        }
+        else
+        {
+            objectname = "UNDEFINED";
+        }
+
         overlayBoundingBox(frameData, box, m_config.outDataWidth,
                             m_config.outDataHeight, objectname);
 

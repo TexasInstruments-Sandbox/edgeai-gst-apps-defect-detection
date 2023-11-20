@@ -22,6 +22,8 @@ j721e:
             out-pool-size: 4
     scaler:
         element: tiovxmultiscaler
+        property:
+            target: [0,1]
     dlpreproc:
         element: tiovxdlpreproc
         property:
@@ -40,9 +42,9 @@ j721e:
         element: v4l2h265dec
     h264enc:
         element: v4l2h264enc
-        property:
-            bitrate: 10000000
     h265enc: null
+    jpegenc:
+        element: jpegenc
     inferer:
         target: dsp
         core-id: [1]
@@ -60,6 +62,8 @@ j721s2:
             out-pool-size: 4
     scaler:
         element: tiovxmultiscaler
+        property:
+            target: [0,1]
     dlpreproc:
         element: tiovxdlpreproc
         property:
@@ -72,14 +76,16 @@ j721s2:
         element: tiovxldc
     h264dec:
         element: v4l2h264dec
+        property:
+            capture-io-mode: 5
     h265dec:
         element: v4l2h265dec
     h264enc:
         element: v4l2h264enc
-        property:
-            bitrate: 10000000
     h265enc:
         element: v4l2h265enc
+    jpegenc:
+        element: jpegenc
     inferer:
         target: dsp
         core-id: [1]
@@ -97,6 +103,8 @@ j784s4:
             out-pool-size: 4
     scaler:
         element: tiovxmultiscaler
+        property:
+            target: [0,1,2,3]
     dlpreproc:
         element: tiovxdlpreproc
         property:
@@ -113,14 +121,16 @@ j784s4:
             target: [0,1]
     h264dec:
         element: v4l2h264dec
+        property:
+            capture-io-mode: 5
     h265dec:
         element: v4l2h265dec
     h264enc:
         element: v4l2h264enc
-        property:
-            bitrate: 10000000
     h265enc:
         element: v4l2h265enc
+    jpegenc:
+        element: jpegenc
     inferer:
         target: dsp
         core-id: [1,2,3,4]
@@ -135,6 +145,8 @@ am62a:
         element: videoconvert
     scaler:
         element: tiovxmultiscaler
+        property:
+            target: [0,1]
     dlpreproc:
         element: tiovxdlpreproc
         property:
@@ -147,26 +159,34 @@ am62a:
         element: tiovxldc
     h264dec:
         element: v4l2h264dec
+        property:
+            capture-io-mode: 5
     h265dec:
         element: v4l2h265dec
     h264enc:
         element: v4l2h264enc
     h265enc:
         element: v4l2h265enc
+    jpegenc:
+        element: v4l2jpegenc
     inferer:
         target: dsp
         core-id: [1]
 
 #==================== AM62X ====================
-am62:
+am62x:
     dlcolorconvert:
-        element: videoconvert
+        element: ticolorconvert
     colorconvert:
-        element: videoconvert
+        element: ticolorconvert
     scaler:
-        element: videoscale
-    dlpreproc: null
-    mosaic: null
+        element: tiscaler
+    dlpreproc:
+        element: tidlpreproc
+        property:
+            out-pool-size: 4
+    mosaic:
+        element: timosaic
     isp: null
     ldc: null
     h264dec:
@@ -177,6 +197,8 @@ am62:
         element: v4l2h264enc
     h265enc:
         element: v4l2h265enc
+    jpegenc:
+        element: jpegenc
     inferer:
         target: arm
 #==================== ARM-ONLY ====================
@@ -199,5 +221,7 @@ arm:
         element: v4l2h264enc
     h265enc:
         element: v4l2h265enc
+    jpegenc:
+        element: jpegenc
     inferer:
         target: arm

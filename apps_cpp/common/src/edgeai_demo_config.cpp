@@ -81,18 +81,11 @@ static map<string, vector<string>> gVideoDecMap =
     {"auto", {"decodebin"}}
 };
 
-    
-
-static map<string, string> gImageEncMap =
-{
-    {".jpg", "jpegenc"}
-};
-
 static map<string, vector<string>> gVideoEncMap =
 {
-    {".mov", {"v4l2h264enc","h264parse","qtmux"}},
-    {".mp4", {"v4l2h264enc","h264parse","mp4mux"}},
-    {".mkv", {"v4l2h264enc","h264parse","matroskamux"}}
+    {".mov", {"h264parse","qtmux"}},
+    {".mp4", {"h264parse","mp4mux"}},
+    {".mkv", {"h264parse","matroskamux"}}
 };
 
 int32_t InputInfo::m_numInstances = 0;
@@ -136,7 +129,7 @@ InputInfo::InputInfo(const YAML::Node &node)
 
     if (node["subdev-id"])
     {
-        m_subdev_id = node["subdev-id"].as<int32_t>();
+        m_subdev_id = node["subdev-id"].as<string>();
     }
 
     if (node["ldc"])
@@ -158,7 +151,10 @@ InputInfo::InputInfo(const YAML::Node &node)
     factory = gst_element_factory_find(scaler.c_str());
     padtemplate = get_pad_template(factory, GST_PAD_SRC);
 
-    m_scalerIsMulltiSrc = (padtemplate->presence == GST_PAD_REQUEST)?true:false;
+    if (NULL != padtemplate)
+    {
+        m_scalerIsMulltiSrc = (padtemplate->presence == GST_PAD_REQUEST) ? true : false;
+    }
 
     LOG_DEBUG("CONSTRUCTOR\n");
 }
@@ -294,7 +290,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                 string caps = "video/x-bayer," + whStr + ",format=" + m_format;
                 makeElement(m_inputElements,"queue",m_gstElementProperty,caps.c_str());
 
-                string dcc_isp_file =  "/opt/imaging/" + m_sen_id + "/dcc_viss.bin";
+                string dcc_isp_file =  "/opt/imaging/" + m_sen_id + "/linear/dcc_viss.bin";
                 string senName;
                 string formatMsb;
 
@@ -356,7 +352,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                              ",height=" +
                              to_string(m_height);
 
-                    string dcc_file = "/opt/imaging/" + m_sen_id + "/dcc_ldc.bin";
+                    string dcc_file = "/opt/imaging/" + m_sen_id + "/linear/dcc_ldc.bin";
 
                     m_gstElementProperty = {{"sensor-name",senName.c_str()},
                                             {"dcc-file",dcc_file.c_str()},
@@ -493,7 +489,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                                 m_gstElementProperty,
                                 NULL);
 
-                    m_gstElementProperty = {{"pool-size","8"}};
+                    m_gstElementProperty = {{"pool-size","12"}};
                     string caps = "video/x-raw, format=NV12";
                     makeElement(m_inputElements,
                                 "tiovxmemalloc",
@@ -551,7 +547,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                                 m_gstElementProperty,
                                 NULL);
 
-                    m_gstElementProperty = {{"pool-size","8"}};
+                    m_gstElementProperty = {{"pool-size","12"}};
                     string caps = "video/x-raw, format=NV12";
                     makeElement(m_inputElements,
                                 "tiovxmemalloc",
@@ -587,7 +583,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                                 m_gstElementProperty,
                                 NULL);
 
-                    m_gstElementProperty = {{"pool-size","8"}};
+                    m_gstElementProperty = {{"pool-size","12"}};
                     string caps = "video/x-raw, format=NV12";
                     makeElement(m_inputElements,
                                 "tiovxmemalloc",
@@ -637,7 +633,7 @@ int32_t InputInfo::addGstPipeline(vector<vector<GstElement*>>   &preProcElementV
                                 m_gstElementProperty,
                                 NULL);
 
-                    m_gstElementProperty = {{"pool-size","8"}};
+                    m_gstElementProperty = {{"pool-size","12"}};
                     string caps = "video/x-raw, format=NV12";
                     makeElement(m_inputElements,
                                 "tiovxmemalloc",
@@ -823,7 +819,7 @@ int32_t InputInfo::getSrcPipelines(vector<GstElement *>    &srcPipelines,
             GValue val = G_VALUE_INIT;
             g_value_init (&val, G_TYPE_STRING);
 
-            string dcc_2a_file_path = "/opt/imaging/"+m_sen_id+"/dcc_2a.bin";
+            string dcc_2a_file_path = "/opt/imaging/"+m_sen_id+"/linear/dcc_2a.bin";
             g_value_set_string (&val,dcc_2a_file_path.c_str());
             gst_child_proxy_set_property (GST_CHILD_PROXY (m_inputElements[i]),
                                           "sink_0::dcc-2a-file",
@@ -834,8 +830,7 @@ int32_t InputInfo::getSrcPipelines(vector<GstElement *>    &srcPipelines,
             {
                 //Dont do this for bggi format i.e ov2313
                 g_value_init (&val, G_TYPE_STRING);
-                string device = "/dev/v4l-subdev"+to_string(m_subdev_id);
-                g_value_set_string (&val,device.c_str());
+                g_value_set_string (&val,m_subdev_id.c_str());
                 gst_child_proxy_set_property (GST_CHILD_PROXY(m_inputElements[i]),
                                               "sink_0::device",
                                               &val);
@@ -1119,10 +1114,13 @@ int32_t InputInfo::getSrcPipelines(vector<GstElement *>    &srcPipelines,
 YAML::Node InputInfo::getColorConvertConfig(string inputFmt, string outputFmt)
 {
     map<string, vector<string>> tiovxdlccCombination ={
+                                                        {"NV12", {"RGB","I420"}},
+                                                        {"NV21", {"RGB","I420"}},
                                                         {"RGB",  {"NV12"}},
                                                         {"I420", {"NV12"}},
-                                                        {"NV12", {"RGB","I420"}},
-                                                        {"NV21", {"RGB","I420"}}
+                                                        {"UYVY", {"NV12"}},
+                                                        {"YUY2", {"NV12"}},
+                                                        {"GRAY8", {"NV12"}}
                                                       };
 
 
@@ -1212,9 +1210,9 @@ OutputInfo::OutputInfo(const YAML::Node    &node,
     {
         m_port = node["port"].as<int32_t>();
     }
-    if (node["payloader"])
+    if (node["encoding"])
     {
-        m_payloader = node["payloader"].as<string>();
+        m_encoding = node["encoding"].as<string>();
     }
     if (node["gop-size"])
     {
@@ -1224,9 +1222,9 @@ OutputInfo::OutputInfo(const YAML::Node    &node,
     {
         m_bitrate = node["bitrate"].as<int32_t>();
     }
-    if (node["overlay-performance"])
+    if (node["overlay-perf-type"])
     {
-        m_overlayPerformance = node["overlay-performance"].as<bool>();
+        m_overlayPerfType = node["overlay-perf-type"].as<string>();
     }
     LOG_DEBUG("CONSTRUCTOR\n");
 }
@@ -1235,11 +1233,17 @@ int32_t OutputInfo::appendGstPipeline()
 {
     if (m_mosaicEnabled)
     {
+        string mosaic_name = gstElementMap["mosaic"]["element"].as<string>();
+
         string background = "/tmp/"+ m_bkgndElemName;
         m_gstElementProperty = {{"name",m_mosaicElemName.c_str()},
                                 {"background",background.c_str()},
-                                {"target","1"}
                                 };
+        if (mosaic_name == "tiovxmosaic")
+        {
+            m_gstElementProperty.push_back({"target","1"});
+        }
+
         string caps = "video/x-raw,format=NV12,width=" +
                       to_string(m_width) +
                       ",height=" +
@@ -1250,10 +1254,20 @@ int32_t OutputInfo::appendGstPipeline()
                     caps.c_str());
     }
 
-    if (m_overlayPerformance)
+    if (m_overlayPerfType != "")
     {
+        printf("%s\n",m_overlayPerfType.c_str());
         makeElement(m_dispElements,"queue",m_gstElementProperty,NULL);
         m_gstElementProperty = {{"title",m_title.c_str()}};
+
+        if (m_overlayPerfType == "text")
+        {
+            m_gstElementProperty.push_back({"overlay-type","1"});
+        }
+        else
+        {
+            m_gstElementProperty.push_back({"overlay-type","0"});
+        }
         makeElement(m_dispElements,"tiperfoverlay",m_gstElementProperty,NULL);
     }
 
@@ -1265,7 +1279,7 @@ int32_t OutputInfo::appendGstPipeline()
     {
         sinkType = "video";
     }
-    else if (gImageEncMap.find(sinkExt) != gImageEncMap.end())
+    else if (sinkExt == ".jpg")
     {
         sinkType = "image";
     }
@@ -1300,7 +1314,10 @@ int32_t OutputInfo::appendGstPipeline()
 
     else if (sinkType == "image")
     {
-        makeElement(m_dispElements,gImageEncMap[sinkExt].c_str(),m_gstElementProperty,NULL);
+        makeElement(m_dispElements,
+                    gstElementMap["jpegenc"]["element"].as<string>().c_str(),
+                    m_gstElementProperty,
+                    NULL);
 
         m_gstElementProperty = {{"location",m_sink.c_str()},
                                 {"name",name.c_str()}};
@@ -1309,10 +1326,23 @@ int32_t OutputInfo::appendGstPipeline()
 
     else if (sinkType == "video")
     {
+        string h264enc = gstElementMap["h264enc"]["element"].as<string>();
+        string encoder_extra_ctrl = "";
+
+        if (h264enc == "v4l2h264enc")
+        {
+            encoder_extra_ctrl = "controls"
+                                 ",frame_level_rate_control_enable=1"
+                                 ",video_bitrate=" + to_string(m_bitrate) +
+                                 ",video_gop_size=" + to_string(m_gopSize);
+
+            m_gstElementProperty = {{"extra-controls",encoder_extra_ctrl.c_str()}};
+        }
+
+        makeElement(m_dispElements,h264enc.c_str(),m_gstElementProperty,NULL);
+
         for(unsigned i=0;i<gVideoEncMap[sinkExt].size();i++)
         {
-            if (gVideoEncMap[sinkExt][i] == "v4l2h264enc")
-                m_gstElementProperty = {{"bitrate",to_string(m_bitrate).c_str()}};
             makeElement(m_dispElements,
                         gVideoEncMap[sinkExt][i].c_str(),
                         m_gstElementProperty,
@@ -1326,18 +1356,55 @@ int32_t OutputInfo::appendGstPipeline()
     }
     else if (sinkType == "remote")
     {
-        m_gstElementProperty = {{"gop-size",to_string(m_gopSize).c_str()},
-                                {"bitrate",to_string(m_bitrate).c_str()}};
+        string h264enc = "";
+        string encoder_extra_ctrl = "";
+        string jpegenc = "";
 
-        makeElement(m_dispElements,"v4l2h264enc",m_gstElementProperty,NULL);
-        makeElement(m_dispElements,"h264parse",m_gstElementProperty,NULL);
-
-        if (m_payloader == "mp4mux")
+        if (m_encoding == "mp4" || m_encoding == "h264")
         {
-            m_gstElementProperty = {{"fragment-duration","1"}};
+            h264enc = gstElementMap["h264enc"]["element"].as<string>();
+            if (h264enc == "v4l2h264enc")
+            {
+                encoder_extra_ctrl = "controls"
+                                    ",frame_level_rate_control_enable=1"
+                                    ",video_bitrate=" + to_string(m_bitrate) +
+                                    ",video_gop_size=" + to_string(m_gopSize);
+
+                m_gstElementProperty = {{"extra-controls",encoder_extra_ctrl.c_str()}};
+            }
+
+            makeElement(m_dispElements,h264enc.c_str(),m_gstElementProperty,NULL);
+            makeElement(m_dispElements,"h264parse",m_gstElementProperty,NULL);
+
+            if (m_encoding == "mp4")
+            {
+                m_gstElementProperty = {{"fragment-duration","1"}};
+                makeElement(m_dispElements,"mp4mux",m_gstElementProperty,NULL);
+            }
+            else if (m_encoding == "h264")
+            {
+                makeElement(m_dispElements,"rtph264pay",m_gstElementProperty,NULL);
+            }
+
         }
 
-        makeElement(m_dispElements,m_payloader.c_str(),m_gstElementProperty,NULL);
+        else if (m_encoding == "jpeg")
+        {
+            jpegenc = gstElementMap["jpegenc"]["element"].as<string>();
+            makeElement(m_dispElements,jpegenc.c_str(),m_gstElementProperty,NULL);
+
+            m_gstElementProperty = {{"boundary","spionisto"}};
+            makeElement(m_dispElements,"multipartmux",m_gstElementProperty,NULL);
+
+            m_gstElementProperty = {{"max","65000"}};
+            makeElement(m_dispElements,"rndbuffersize",m_gstElementProperty,NULL);
+        }
+
+        else
+        {
+            LOG_ERROR("Wrong encoding [%s] defined for remote output.\n", m_encoding.c_str());
+            throw runtime_error("Failed to create Gstreamer Pipeline.");
+        }
 
         m_gstElementProperty = {{"sync","false"},
                                 {"host",m_host.c_str()},
@@ -1426,7 +1493,7 @@ int32_t OutputInfo::allocOutBuff(GstPipe   *gstPipe)
 
         m_titleFrame.setTo(Scalar(0,0,0));
 
-        if (!m_overlayPerformance)
+        if (m_overlayPerfType == "")
         {
             putText(m_titleFrame,
                     "Texas Instruments - Edge Analytics",
@@ -1667,7 +1734,7 @@ int32_t ModelInfo::initialize()
         /* Query the input information for setting the tensor type in pre process. */
         dlInfInputs = m_infererObj->getInputInfo();
         ifInfo = &dlInfInputs->at(0);
-        m_preProcCfg.inputTensorType = ifInfo->type;
+        m_preProcCfg.inputTensorTypes[0] = ifInfo->type;
 
         /* Set input data width and height based on the infererence engine
          * information. This is only used for semantic segmentation models
@@ -2035,6 +2102,10 @@ int32_t FlowInfo::initialize(map<string, ModelInfo*>   &modelMap,
 
         if (status == -1)
         {
+            if (nullptr != preProcObj)
+            {
+                delete preProcObj;
+            }
             break;
         }
         
@@ -2059,6 +2130,10 @@ int32_t FlowInfo::initialize(map<string, ModelInfo*>   &modelMap,
 
         if (status < 0)
         {
+            if (nullptr != preProcObj)
+            {
+                delete preProcObj;
+            }
             LOG_ERROR("createPostprocCntxt() failed.\n");
             break;
         }
@@ -2255,15 +2330,29 @@ int32_t FlowInfo::getSinkPipeline(GstElement*       &sinkPipeline,
 
                 auto const &mosaicInfo = output->m_instIdMosaicMap.at(output->m_numMosaicSink);
                 string mosaicSinkPad = "sink_" + to_string(output->m_numMosaicSink);
+                string mosaic_name = GST_OBJECT_NAME(gst_element_get_factory(mosaic));
+
                 string prop_name;
                 prop_name = mosaicSinkPad+"::startx";
                 setMosaicProperty(mosaic,prop_name,mosaicInfo->m_posX);
                 prop_name = mosaicSinkPad+"::starty";
                 setMosaicProperty(mosaic,prop_name,mosaicInfo->m_posY);
-                prop_name = mosaicSinkPad+"::widths";
-                setMosaicProperty(mosaic,prop_name,mosaicInfo->m_width);
-                prop_name = mosaicSinkPad+"::heights";
-                setMosaicProperty(mosaic,prop_name,mosaicInfo->m_height);
+
+                if (mosaic_name == "tiovxmosaic")
+                {
+                    prop_name = mosaicSinkPad+"::widths";
+                    setMosaicProperty(mosaic,prop_name,mosaicInfo->m_width);
+                    prop_name = mosaicSinkPad+"::heights";
+                    setMosaicProperty(mosaic,prop_name,mosaicInfo->m_height);
+                }
+                else
+                {
+                    prop_name = mosaicSinkPad+"::width";
+                    setMosaicProperty(mosaic,prop_name,mosaicInfo->m_width);
+                    prop_name = mosaicSinkPad+"::height";
+                    setMosaicProperty(mosaic,prop_name,mosaicInfo->m_height);
+                }
+
                 output->m_numMosaicSink += 1;
 
                 if (!output->m_dispElementAdded)
@@ -2273,11 +2362,13 @@ int32_t FlowInfo::getSinkPipeline(GstElement*       &sinkPipeline,
                 }
                 link(output->m_mosaicElements.back(),output->m_dispElements.front());
 
-                if (output->m_overlayPerformance)
+                if (output->m_overlayPerfType != ""
+                    &&
+                    mosaic_name == "tiovxmosaic")
                 {
                     GValue val = G_VALUE_INIT;
                     g_value_init (&val, G_TYPE_INT);
-                    g_value_set_int (&val,3);
+                    g_value_set_int (&val,4);
                     gst_child_proxy_set_property (GST_CHILD_PROXY (mosaic),
                                                   "src::pool-size",
                                                   &val);
@@ -2310,7 +2401,8 @@ int32_t FlowInfo::getSinkPipeline(GstElement*       &sinkPipeline,
 
                     factory = gst_element_factory_find(gstElementMap["scaler"]["element"].as<string>().c_str());
                     padtemplate = get_pad_template(factory, GST_PAD_SRC);
-                    if (padtemplate->presence == GST_PAD_REQUEST) //Multiscaler
+                    if (NULL != padtemplate &&
+                        padtemplate->presence == GST_PAD_REQUEST) //Multiscaler
                     {
                         m_gstElementProperty = {{"target","1"}};
                         if ((sensorWidth/output->m_width) > 4 ||
@@ -2610,28 +2702,34 @@ int32_t DemoConfig::parseFlowInfo(const YAML::Node &config)
                 }
                 visited.push_back(t);
 
-                string      output = flows[t][2].as<string>();
-                vector<int> mosaic_info{};
-                string      debug = "";
+                string output = flows[t][2].as<string>();
+                subFlowConfig.outputs.push_back(output);
+
                 if (flows[t].size() > 3)
                 {
-                    mosaic_info = flows[t][3].as<vector<int>>();
+                    vector<int> mosaic_info = flows[t][3].as<vector<int>>();
+                    subFlowConfig.mosaic_infos.push_back(mosaic_info);
                 }
-                if (flows[t].size() > 4)
+                else
                 {
-                    debug = flows[t][4].as<string>();
+                    subFlowConfig.mosaic_infos.push_back({});
                 }
 
-                subFlowConfig.outputs.push_back(output);
-                subFlowConfig.mosaic_infos.push_back(mosaic_info);
-                subFlowConfig.debug_infos.push_back(debug);
+                if (flows[t].size() > 4)
+                {
+                    string debug = flows[t][4].as<string>();
+                    subFlowConfig.debug_infos.push_back(debug);
+                }
+                else
+                {
+                    subFlowConfig.debug_infos.push_back("");
+                }
             }
 
             flowConfig.subflow_configs.push_back(subFlowConfig);
         }
 
-        auto const     &f = new FlowInfo(flowConfig);
-        m_flowMap[flow_name] = f;
+        m_flowMap[flow_name] = new FlowInfo(flowConfig);
     }
 
     return status;

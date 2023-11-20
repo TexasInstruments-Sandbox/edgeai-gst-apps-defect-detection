@@ -35,97 +35,39 @@
 #include <getopt.h>
 #include <thread>
 #include <stdlib.h>
+#include <string.h>
+
+extern "C" {
 
 /* Module headers. */
+#if defined(SOC_J721E) || defined(SOC_J721S2) || defined(SOC_J784S4) || defined(SOC_AM62A)
 #include <utils/app_init/include/app_init.h>
-#include <utils/include/edgeai_perfstats.h>
+#include <utils/perf_stats/include/app_perf_stats.h>
+#include <utils/ipc/include/app_ipc.h>
+#endif
+#include <edgeai_perf_stats_utils.h>
 
-static bool gStop = false;
-static bool gDisplay = true;
-static bool gLogToFile = false;
-static char *gSubDirName = nullptr;
-static std::thread gDispThreadId;
-
-static void showUsage(const char *name)
-{
-    printf("# \n");
-    printf("# %s [OPTIONAL PARAMETERS]\n", name);
-    printf("# OPTIONAL PARAMETERS:\n");
-    printf("#  [--no-display |-n Display report to the screen. "
-           "Display is enabled by default.]\n");
-    printf("#  [--log        |-l Log the reports to files.\n");
-    printf("#  [--dir        |-d Sub-directory for storing the log files. "
-            "The generated files will be stored under "
-            "../perf_logs/<sub_dir> directory.\n"); 
-    printf("#                    Note that the directory location is relative "
-            "to the current directory the tool is invoked from.\n");
-    printf("#  [--help       |-h]\n");
-    printf("# \n");
-    printf("# (C) Texas Instruments 2021\n");
-    printf("# \n");
-    printf("# EXAMPLE:\n");
-    printf("# Turn off the report display to screen.\n");
-    printf("#    %s -n \n", name);
-    printf("# \n");
-    printf("# Turn on the report logging to files.\n");
-    printf("#    %s -l \n", name);
-    printf("# \n");
-    exit(0);
 }
 
-static int32_t  parse(int32_t   argc,
-                      char     *argv[])
-{
-    int32_t longIndex;
-    int32_t opt;
-    static struct option long_options[] = {
-        {"help",       no_argument,       0, 'h' },
-        {"no-display", no_argument,       0, 'n' },
-        {"log",        no_argument,       0, 'l' },
-        {"dir",        required_argument, 0, 'd' },
-        {0,            0,                 0,  0  }
-    };
-
-    while ((opt = getopt_long(argc, argv,"-hnld:", 
-                   long_options, &longIndex )) != -1)
-    {
-        switch (opt)
-        {
-            case 'l' :
-                gLogToFile = true;
-                break;
-
-            case 'n' :
-                gDisplay = false;
-                break;
-
-            case 'd' :
-                gSubDirName = optarg;
-                break;
-
-            case 'h' :
-            default:
-                showUsage(argv[0]);
-                return -1;
-
-        } // switch (opt)
-
-    }
-
-    return 0;
-
-} // End of parse()
+static bool gStop = false;
+static std::thread gDispThreadId;
 
 static void sigHandler(int32_t sig)
 {
     gStop = true;
-
-    /* Disable the performance report. */
-    ti::utils::disableReport();
 }
 
 void displayThread()
 {
+
+    int32_t status=0;
+#if defined(SOC_J721E) || defined(SOC_J721S2) || defined(SOC_J784S4) || defined(SOC_AM62A)
+    app_perf_stats_cpu_load_t cpu_load;
+#else
+    perfStatsCpuLoad cpu_load;
+    perfStatsCpuStatsInit(&cpu_load);
+#endif
+
 #if defined(SOC_J721E)
     /* open sysfs files for reading temperature data*/
     FILE *cpuTempFd  = fopen("/sys/class/thermal/thermal_zone1/temp", "rb");
@@ -139,77 +81,130 @@ void displayThread()
     while (!gStop)
     {
         system("clear");
-        appPerfStatsCpuLoadPrintAll();
+
+#if defined(SOC_J721E) || defined(SOC_J721S2) || defined(SOC_J784S4) || defined(SOC_AM62A)
+        printf("Summary of CPU load,\n");
+        printf("====================\n\n");
+
+        for(int cpu_id=0; cpu_id<APP_IPC_CPU_MAX; cpu_id++) {
+            if (strstr(appIpcGetCpuName(cpu_id), "mcu") != NULL) {
+                continue;
+            }
+            status = appPerfStatsCpuLoadGet(cpu_id, &cpu_load);
+            if(status==0)
+            {
+                appPerfStatsCpuLoadPrint(cpu_id, &cpu_load);
+            }
+        }
+
+
         appPerfStatsHwaLoadPrintAll();
-        appPerfStatsDdrStatsPrintAll();
         appPerfStatsResetAll();
+#else
+        perfStatsCpuStatsPrint(&cpu_load);
+        perfStatsResetCpuLoadCalc(&cpu_load);
+#endif
+        perfStatsDdrStatsPrintAll();
+        perfStatsResetDdrLoadCalcAll();
 
 #if defined(SOC_J721E)
-        /* Read temperature data*/
-        ret = fscanf(cpuTempFd, "%u", &cpuTemp);
-        if (ret != 1)
-            printf("[ERROR]Failed to read cpuTemp\n");
-        rewind(cpuTempFd);
-        fflush(cpuTempFd);
-        ret = fscanf(wkupTempFd, "%u", &wkupTemp);
-        if (ret != 1)
-            printf("[ERROR]Failed to read wkupTemp\n");
-        rewind(wkupTempFd);
-        fflush(wkupTempFd);
-        ret = fscanf(c7xTempFd, "%u", &c7xTemp);
-        if (ret != 1)
-            printf("[ERROR]Failed to read c7xTemp\n");
-        rewind(c7xTempFd);
-        fflush(c7xTempFd);
-        ret = fscanf(gpuTempFd, "%u", &gpuTemp);
-        if (ret != 1)
-            printf("[ERROR]Failed to read gpuTemp\n");
-        rewind(gpuTempFd);
-        fflush(gpuTempFd);
-        ret = fscanf(r5fTempFd, "%u", &r5fTemp);
-        if (ret != 1)
-            printf("[ERROR]Failed to read r5fTemp\n");
-        rewind(r5fTempFd);
-        fflush(r5fTempFd);
-
         /* print temperature stats*/
-        printf("\n");
-        printf("SoC temperature statistics\n");
-        printf("==========================\n");
-        printf("\n");
-        printf("CPU:\t%0.2f degree Celsius\n", float(cpuTemp)/1000);
-        printf("WKUP:\t%0.2f degree Celsius\n", float(wkupTemp)/1000);
-        printf("C7X:\t%0.2f degree Celsius\n", float(c7xTemp)/1000);
-        printf("GPU:\t%0.2f degree Celsius\n", float(gpuTemp)/1000);
-        printf("R5F:\t%0.2f degree Celsius\n", float(r5fTemp)/1000);
+        if (NULL != cpuTempFd ||
+            NULL != wkupTempFd ||
+            NULL != c7xTempFd ||
+            NULL != gpuTempFd ||
+            NULL != r5fTempFd)
+        {
+            printf("\n");
+            printf("SoC temperature statistics\n");
+            printf("==========================\n");
+            printf("\n");
+        }
+
+        /* Read temperature data*/
+        if (NULL != cpuTempFd)
+        {
+            ret = fscanf(cpuTempFd, "%u", &cpuTemp);
+            if (ret != 1)
+                printf("[ERROR]Failed to read cpuTemp\n");
+            rewind(cpuTempFd);
+            fflush(cpuTempFd);
+            printf("CPU:\t%0.2f degree Celsius\n", float(cpuTemp)/1000);
+        }
+        if (NULL != wkupTempFd)
+        {
+            ret = fscanf(wkupTempFd, "%u", &wkupTemp);
+            if (ret != 1)
+                printf("[ERROR]Failed to read wkupTemp\n");
+            rewind(wkupTempFd);
+            fflush(wkupTempFd);
+            printf("WKUP:\t%0.2f degree Celsius\n", float(wkupTemp)/1000);
+        }
+        if (NULL != c7xTempFd)
+        {
+            ret = fscanf(c7xTempFd, "%u", &c7xTemp);
+            if (ret != 1)
+                printf("[ERROR]Failed to read c7xTemp\n");
+            rewind(c7xTempFd);
+            fflush(c7xTempFd);
+            printf("C7X:\t%0.2f degree Celsius\n", float(c7xTemp)/1000);
+        }
+        if (NULL != gpuTempFd)
+        {
+            ret = fscanf(gpuTempFd, "%u", &gpuTemp);
+            if (ret != 1)
+                printf("[ERROR]Failed to read gpuTemp\n");
+            rewind(gpuTempFd);
+            fflush(gpuTempFd);
+            printf("GPU:\t%0.2f degree Celsius\n", float(gpuTemp)/1000);
+        }
+        if (NULL != r5fTempFd)
+        {
+            ret = fscanf(r5fTempFd, "%u", &r5fTemp);
+            if (ret != 1)
+                printf("[ERROR]Failed to read r5fTemp\n");
+            rewind(r5fTempFd);
+            fflush(r5fTempFd);
+            printf("R5F:\t%0.2f degree Celsius\n", float(r5fTemp)/1000);
+        }
+
 #endif
-        this_thread::sleep_for(chrono::milliseconds(2000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
 
 #if defined(SOC_J721E)
     /* close fds*/
-    fclose(cpuTempFd);
-    fclose(wkupTempFd);
-    fclose(c7xTempFd);
-    fclose(gpuTempFd);
-    fclose(r5fTempFd);
+    if (NULL != cpuTempFd)
+    {
+        fclose(cpuTempFd);
+    }
+    if (NULL != wkupTempFd)
+    {
+        fclose(wkupTempFd);
+    }
+    if (NULL != c7xTempFd)
+    {
+        fclose(c7xTempFd);
+    }
+    if (NULL != gpuTempFd)
+    {
+        fclose(gpuTempFd);
+    }
+    if (NULL != r5fTempFd)
+    {
+        fclose(r5fTempFd);
+    }
 #endif
 }
 
-int main(int argc, char *argv[])
+int main()
 {
     int32_t status = 0;
 
     /* Register SIGINT handler. */
     signal(SIGINT, sigHandler);
 
-    status = parse(argc, argv);
-
-    if (status < 0)
-    {
-        return status;
-    }
-
+#if defined(SOC_J721E) || defined(SOC_J721S2) || defined(SOC_J784S4) || defined(SOC_AM62A)
     /* Initialize the system. */
     status = appInit();
 
@@ -218,26 +213,18 @@ int main(int argc, char *argv[])
         perror("appInit failed");
         return status;
     }
+#endif
 
-    /* Configure the performance report. */
-    ti::utils::enableReport(gLogToFile, gSubDirName);
+    gDispThreadId = std::thread([]{displayThread();});
 
-    if (gDisplay)
-    {
-        gDispThreadId = std::thread([]{displayThread();});
+    gDispThreadId.join();
 
-        gDispThreadId.join();
-    }
-
-    if (gLogToFile)
-    {
-        ti::utils::waitForPerfThreadExit();
-    }
-
+#if defined(SOC_J721E) || defined(SOC_J721S2) || defined(SOC_J784S4) || defined(SOC_AM62A)
     printf("CALLING DE-INIT.\n");
 
     /* De-Initialize the system. */
     status = appDeInit();
+#endif
 
     return status;
 }
